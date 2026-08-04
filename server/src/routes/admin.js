@@ -1,6 +1,14 @@
 import { loadConfig, saveConfig } from '../config-store.js'
 import { rateLimitKey } from '../lib/auth.js'
 import { sortVersions } from '../engine/resolveVersion.js'
+import { appendAudit, diffObjects } from '../lib/logfile.js'
+
+/** Аудит зміни конфігу: в основний лог і в append-only audit.jsonl. */
+function audit(req, entry) {
+  const full = { ts: new Date().toISOString(), role: req.session.role, ...entry }
+  req.log.info({ audit: true, ...full }, `конфіг: ${entry.action}`)
+  appendAudit(full)
+}
 
 /** Помилки валідації конфігу → 422 з текстом; усе інше (fs тощо) → нагору, у generic 500. */
 function saveOr422(reply, config) {
@@ -16,6 +24,8 @@ function saveOr422(reply, config) {
 export default async function adminRoutes(app) {
   app.addHook('preHandler', async (req, reply) => {
     if (!req.session?.admin) {
+      // security-подія: не-адмін в адмін-зоні
+      req.log.warn({ security: true, event: 'forbidden-admin', role: req.session?.role ?? null, url: req.url }, 'спроба адмін-зони')
       reply.code(403).send({ error: 'Лише для адміністратора' })
     }
   })
@@ -65,10 +75,18 @@ export default async function adminRoutes(app) {
 
       const id = effectiveFrom.slice(0, 7)
       const next = { ...version, id, label, effectiveFrom }
+      // База для аудит-діфу: замінена версія, а для нової — попередня за датою.
+      const baseline = existing ?? sortVersions(config.rateVersions).filter((v) => v.effectiveFrom < effectiveFrom).at(-1) ?? {}
       // Одразу в хронологічному порядку: на ньому тримаються і резолв, і списки в UI.
       config.rateVersions = sortVersions([...config.rateVersions.filter((v) => v.effectiveFrom !== effectiveFrom), next])
 
       if (saveOr422(reply, config)) return
+      audit(req, {
+        action: existing ? 'version.replace' : 'version.create',
+        versionId: id,
+        effectiveFrom,
+        changes: diffObjects(baseline, next),
+      })
       return { ok: true, id }
     }
   )
@@ -100,8 +118,10 @@ export default async function adminRoutes(app) {
     async (req, reply) => {
       const { year, schedules } = req.body
       const config = structuredClone(loadConfig())
+      const before = loadConfig().normHours[year] ?? null
       config.normHours[year] = schedules
       if (saveOr422(reply, config)) return
+      audit(req, { action: 'norm-hours.set', year, changes: diffObjects(before ?? {}, schedules) })
       return { ok: true }
     }
   )

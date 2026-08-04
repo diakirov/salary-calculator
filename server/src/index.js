@@ -15,14 +15,28 @@ import { fileURLToPath } from 'node:url'
 
 import { loadConfig } from './config-store.js'
 import { COOKIE_NAME, readSession } from './lib/auth.js'
+import { initLogDir, makeLogStream, fileLoggingAvailable } from './lib/logfile.js'
 import authRoutes from './routes/auth.js'
 import calcRoutes from './routes/calc.js'
 import adminRoutes from './routes/admin.js'
+import logsRoutes from './routes/logs.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
+
+// Додатковий файловий потік логів у волюмі — щоб адмінська кнопка «зберегти
+// зріз» мала звідки читати (docker-логи зсередини контейнера недосяжні).
+// Без прав на теку тихо деградуємо до stdout-only.
+const logDirOk = initLogDir(process.env.LOG_DIR || '/data/logs')
+
 // trustProxy НЕ true: X-Forwarded-For віримо лише локальному проксі (Caddy через
 // docker-міст), інакше клієнт підробкою заголовка обходить rate-limit за IP.
-const app = Fastify({ logger: true, trustProxy: 'loopback, uniquelocal' })
+const app = Fastify({
+  logger: { stream: makeLogStream() },
+  trustProxy: 'loopback, uniquelocal',
+})
+if (!logDirOk) {
+  app.log.warn('Файлові логи вимкнено: тека логів недоступна для запису (потрібен chown волюма) — працює лише stdout')
+}
 
 await app.register(cookie)
 await app.register(rateLimit, { global: false })
@@ -64,6 +78,8 @@ loadConfig()
 app.decorateRequest('session', null)
 app.addHook('onRequest', async (req) => {
   req.session = readSession(req.cookies?.[COOKIE_NAME])
+  // Роль — у кожен рядок логу цього запиту: «хто» без паролів і токенів.
+  if (req.session) req.log = req.log.child({ role: req.session.role })
 })
 
 // Захист усього API, крім логіна
@@ -78,6 +94,7 @@ app.addHook('preHandler', async (req, reply) => {
 await app.register(authRoutes)
 await app.register(calcRoutes)
 await app.register(adminRoutes)
+await app.register(logsRoutes)
 
 // Брендинг (логотип, кіт, кольори) — теж поза репозиторієм, віддається лише
 // авторизованим. BRANDING_DIR за замовчуванням поруч із конфігом.
@@ -116,7 +133,8 @@ if (fs.existsSync(faviconDir)) {
 
 // Ліверність для docker healthcheck: без авторизації, без даних конфігу —
 // лише підтвердження, що процес живий і конфіг читається.
-app.get('/healthz', async (req, reply) => {
+// logLevel silent: пінги що 30 с зʼїдали майже всю ротацію докер-логів.
+app.get('/healthz', { logLevel: 'silent' }, async (req, reply) => {
   try {
     await loadConfig()
     return { ok: true }

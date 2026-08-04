@@ -18,8 +18,11 @@ export default async function authRoutes(app) {
     async (req, reply) => {
       const role = await verifyPassword(req.body.password)
       if (!role) {
+        // security-подія: сигнал для виявлення перебору (пароль не логуємо ніколи)
+        req.log.warn({ security: true, event: 'login-failed', ip: req.ip }, 'невдалий вхід')
         return reply.code(401).send({ error: 'Невірний пароль' })
       }
+      req.log.info({ security: true, event: 'login-ok', role }, 'вхід')
       reply.setCookie(COOKIE_NAME, issueSession(role), cookieOptions)
       // Та сама форма, що /api/me: клієнту після логіна не треба другий запит.
       const meta = roles()[role] ?? {}

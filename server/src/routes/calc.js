@@ -45,6 +45,8 @@ export default async function calcRoutes(app) {
       const { profileId, year, month, schedule, versionId } = req.body
 
       if (!req.session.profiles.includes(profileId)) {
+        // security-подія: роль стукає в чужий профіль — це має бути видно в логах явно
+        req.log.warn({ security: true, event: 'forbidden-profile', role: req.session.role, profileId }, 'спроба чужого профілю')
         return reply.code(403).send({ error: 'Цей калькулятор недоступний для вашої ролі' })
       }
 
