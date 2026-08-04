@@ -28,11 +28,12 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
   const [profileId, setProfileId] = useState(null)
   const [forms, setForms] = useState({})
   const [versionId, setVersionId] = useState(null)
-  const [showGross, setShowGross] = useState(false)
+  const [showGross, setShowGross] = useState(() => !!loadState().showGross)
   const [result, setResult] = useState(null)
   const [calcError, setCalcError] = useState(null)
   const [history, setHistory] = useState(loadHistory)
   const debounce = useRef(null)
+  const calcSeq = useRef(0) // захист від гонки: повільна стара відповідь не затирає нову
 
   // ── Завантаження метаданих і відновлення стану ──
   useEffect(() => {
@@ -60,8 +61,8 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
   // ── Збереження стану ──
   useEffect(() => {
     if (!profileId) return
-    saveState({ lastProfile: profileId, forms })
-  }, [profileId, forms])
+    saveState({ lastProfile: profileId, forms, showGross })
+  }, [profileId, forms, showGross])
 
   function patch(fields) {
     setForms((prev) => ({ ...prev, [profileId]: { ...form, ...fields } }))
@@ -96,6 +97,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
 
     clearTimeout(debounce.current)
     debounce.current = setTimeout(() => {
+      const seq = ++calcSeq.current
       api
         .calc({
           profileId,
@@ -115,8 +117,8 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
           ),
           ...(versionId ? { versionId } : {}),
         })
-        .then((r) => { setResult(r); setCalcError(null) })
-        .catch((e) => { setCalcError(e.message); if (e.status === 401) onLogout() })
+        .then((r) => { if (seq !== calcSeq.current) return; setResult(r); setCalcError(null) })
+        .catch((e) => { if (seq !== calcSeq.current) return; setCalcError(e.message); if (e.status === 401) onLogout() })
     }, 180)
     return () => clearTimeout(debounce.current)
   }, [profileId, JSON.stringify(form), versionId, normHours])
@@ -347,7 +349,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
                 {calcError
                   ? calcError
                   : result
-                    ? `Ставка ${fmtMoney(result.hourlyRate)}/год · норма ${result.normHours} год${form.knowledge ? ` · ${result.effectiveHours} год зі знанням` : ''}`
+                    ? `Ставка ${fmtMoney(showGross ? result.hourlyRate : result.hourlyRate * (1 - result.taxRate))}/год · норма ${result.normHours} год${form.knowledge ? ` · ${result.effectiveHours} год зі знанням` : ''}`
                     : '…'}
               </div>
               <div className="sc-hero-actions">
@@ -440,26 +442,19 @@ function ExtrasFields({ profile, form, patch }) {
 function Breakdown({ result, showGross }) {
   if (!result) return <div className="sc-history-empty">Введи параметри — все порахується само</div>
 
+  // Кожен рядок показується у валюті активного режиму: в «На руки» оподатковувані
+  // рядки множаться на (1 − податок), тож колонка сходиться з підсумком в обох
+  // режимах. Підсумки завжди серверні — клієнт нічого не досумовує.
+  const k = showGross ? 1 : 1 - result.taxRate
+
   return (
     <div className="sc-breakdown">
       {result.rows.map((r) => (
         <div className="sc-row" key={r.id}>
           <span className="k">{r.label}</span>
-          <span className={`v ${r.amount < 0 ? 'neg' : ''}`}>{fmtMoney(r.amount)}</span>
+          <span className={`v ${r.amount < 0 ? 'neg' : ''}`}>{fmtMoney(r.amount * k)}</span>
         </div>
       ))}
-      <div className="sc-row">
-        <span className="k">Брутто</span>
-        <span className="v">{fmtMoney(result.gross)}</span>
-      </div>
-      <div className="sc-row">
-        <span className="k">Податок {Math.round(result.taxRate * 100)}%</span>
-        <span className="v neg">−{fmtMoney(result.tax).replace('₴', '₴')}</span>
-      </div>
-      <div className="sc-row">
-        <span className="k">Нетто</span>
-        <span className="v">{fmtMoney(result.net)}</span>
-      </div>
       {result.netExtras.map((r) => (
         <div className="sc-row" key={r.id}>
           <span className="k">{r.label} (чистими)</span>
@@ -473,6 +468,19 @@ function Breakdown({ result, showGross }) {
         <span className="k">{showGross ? 'Разом до податків' : 'Разом на руки'}</span>
         <span className="v">{fmtMoney(showGross ? result.gross : result.totalNet)}</span>
       </div>
+      {showGross && (
+        <>
+          {/* довідково під підсумком: скільки з цього брутто піде податком і що лишиться */}
+          <div className="sc-row ref">
+            <span className="k">Податок {Math.round(result.taxRate * 100)}%</span>
+            <span className="v dim">−{fmtMoney(result.tax)}</span>
+          </div>
+          <div className="sc-row ref">
+            <span className="k">На руки</span>
+            <span className="v dim">{fmtMoney(result.totalNet)}</span>
+          </div>
+        </>
+      )}
     </div>
   )
 }

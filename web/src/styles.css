@@ -132,6 +132,8 @@ input, select { font-family: inherit; }
 .sc-row .v.neg { color: var(--sc-neg); }
 .sc-row .v.dim { color: var(--sc-muted); font-weight: 400; }
 .sc-row.total .v { font-size: 14.5px; }
+.sc-row.ref { border-bottom: 0; padding: 2px 0; }
+.sc-row.ref .k { font-size: 10.5px; }
 
 /* ── Історія ── */
 .sc-history-divider { border-top: 1px solid var(--sc-line); margin: 9px 0 8px; }
