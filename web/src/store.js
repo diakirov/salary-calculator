@@ -14,7 +14,17 @@ function read(key, fallback) {
 }
 
 export function loadState() {
-  return read(KEY_STATE, { lastProfile: null, forms: {} })
+  const st = read(KEY_STATE, { lastProfile: null, forms: {} })
+  // Одноразова міграція (05.08.2026): «Знання» стало увімкненим за
+  // замовчуванням. У старих збережених формах false — старий дефолт,
+  // а не вибір людини, тож піднімаємо його один раз; далі поважаємо вибір.
+  if (!localStorage.getItem('sc-knowledge-default-v2')) {
+    for (const f of Object.values(st.forms ?? {})) {
+      if (f && typeof f === 'object') f.knowledge = true
+    }
+    localStorage.setItem('sc-knowledge-default-v2', '1')
+  }
+  return st
 }
 
 export function saveState(state) {

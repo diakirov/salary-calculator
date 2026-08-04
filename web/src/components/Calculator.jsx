@@ -31,7 +31,7 @@ function emptyForm() {
     zoneId: 3,
     qualId: 1,
     tenureYears: '',
-    knowledge: false,
+    knowledge: true, // за замовчуванням увімкнено — переважна більшість підтверджує знання
     nightHours: '',
     x2Hours: '',
     extras: {},
@@ -72,6 +72,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
       ...f,
       schedule: f.schedule ?? schedules[0] ?? '2/2',
       stageId: f.stageId ?? profile?.stages.find((s) => s.default)?.id ?? profile?.stages[0]?.id,
+      knowledge: f.knowledge ?? true,
     }
   }, [forms, profileId, meta, profile])
 
@@ -172,16 +173,12 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
       `${profile.name} · ${MONTH_NAMES[form.month]} ${form.year} · ${showGross ? 'до податків' : 'на руки'}`,
     ]
     for (const r of result.rows) lines.push(`${r.label}: ${fmtMoney(r.amount * k)}`)
-    for (const r of result.netExtras) {
-      lines.push(
-        showGross
-          ? `${r.label} (чистими): —`
-          : `${r.label} (чистими): ${r.amount > 0 ? '+' : '−'}${fmtMoney(Math.abs(r.amount))}`
-      )
-    }
+    const extraLine = (r) => `${r.label} (чистими): ${r.amount > 0 ? '+' : '−'}${fmtMoney(Math.abs(r.amount))}`
+    if (!showGross) for (const r of result.netExtras) lines.push(extraLine(r))
     lines.push(`Разом ${showGross ? 'до податків' : 'на руки'}: ${fmtMoney(showGross ? result.gross : result.totalNet)}`)
     if (showGross) {
       lines.push(`Податок ${Math.round(result.taxRate * 100)}%: −${fmtMoney(result.tax)}`)
+      for (const r of result.netExtras) lines.push(extraLine(r))
       lines.push(`На руки: ${fmtMoney(result.totalNet)}`)
     }
     if (result.version?.label) lines.push(`Ставки: ${result.version.label}`)
@@ -429,7 +426,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
             <div className="sc-panel">
               <h2>Деталізація</h2>
               <Breakdown result={result} showGross={showGross} />
-              <HowCalculated result={result} showGross={showGross} />
+              <HowCalculated result={result} form={form} showGross={showGross} />
               <div className="sc-history-divider" />
               <h2 style={{ margin: '0 0 6px' }}>Історія</h2>
               {history.length === 0 ? (
@@ -521,43 +518,63 @@ function fallbackCopy(text, done) {
 }
 
 /**
- * Пояснення до рядків — лише загальна механіка розрахунку, без жодного числа
- * поза тими, що вже є у відповіді. Ключі — стабільні id рядків рушія.
+ * «Як пораховано» — кожен рядок із реально підставленими числами.
+ * Складові (оклад, премія зони тощо) виводяться назад із сум відповіді
+ * діленням на частку — сервер додаткових даних не шле, а залогінений
+ * користувач і так відновив би їх на калькуляторі.
  */
-const HOW_BY_ID = {
-  salary: 'оклад × (відпрацьовані години / норма)',
-  zone: 'надбавка зони × (відпрацьовані години / норма)',
-  qual: 'надбавка кваліфікації × (відпрацьовані години / норма)',
-  tenure: 'база вислуги × відсоток за рік × повні роки × (відпрацьовані / норма)',
-  night: 'погодинна ставка × нічні години × нічний коефіцієнт',
-  x2: '(оклад + надбавка зони) / норма × години х2 — перша половина цих годин уже у відпрацьованих',
-}
-
-function HowCalculated({ result, showGross }) {
+function HowCalculated({ result, form, showGross }) {
   if (!result) return null
-  const pct = Math.round((result.effectiveHours / result.normHours) * 1000) / 10
+  const share = result.effectiveHours / result.normHours
+  const pct = Math.round(share * 1000) / 10
+  const by = Object.fromEntries(result.rows.map((r) => [r.id, r.amount]))
+  const f = fmtMoney
+  const nightH = parseNum(form.nightHours) ?? 0
+  const x2H = parseNum(form.x2Hours) ?? 0
+  const tenureY = Math.floor(parseNum(form.tenureYears) ?? 0)
+
+  const lines = []
+  if (share > 0) {
+    if (by.salary != null) lines.push(['Ставка', `оклад ${f(by.salary / share)} × ${pct}% = ${f(by.salary)}`])
+    if (by.zone != null) lines.push(['Надбавка зони', `${f(by.zone / share)} × ${pct}% = ${f(by.zone)}`])
+    if (by.qual != null) lines.push(['Кваліфікація', `${f(by.qual / share)} × ${pct}% = ${f(by.qual)}`])
+    if (by.tenure != null)
+      lines.push(['Вислуга', `${f(by.tenure / share)} за ${tenureY} р. стажу × ${pct}% = ${f(by.tenure)}`])
+  }
+  if (by.night != null && nightH > 0) {
+    const mult = Math.round((by.night / (result.hourlyRate * nightH)) * 100) / 100
+    lines.push(['Нічні', `${f(result.hourlyRate)}/год × ${nightH} год × ${mult} = ${f(by.night)}`])
+  }
+  if (by.x2 != null && x2H > 0) {
+    lines.push([
+      'Подвоєні',
+      `${f(by.x2 / x2H)}/год × ${x2H} год = ${f(by.x2)} — перша половина цих годин уже у відпрацьованих`,
+    ])
+  }
+
   return (
     <details className="sc-how">
       <summary>Як пораховано</summary>
       <div className="sc-how-body">
         <p>
-          Частка місяця: {result.effectiveHours} год із норми {result.normHours} = {pct}%.
-          Всі «пропорційні» рядки множаться саме на неї.
+          Частка місяця: {result.effectiveHours} год із норми {result.normHours} ={' '}
+          {pct}%{form.knowledge ? ' (включно з +1 год за знання)' : ''}. Пропорційні рядки множаться на неї.
         </p>
-        {result.rows.map((r) =>
-          HOW_BY_ID[r.id] ? (
-            <p key={r.id}>
-              <b>{r.label}:</b> {HOW_BY_ID[r.id]}
-            </p>
-          ) : null
-        )}
+        {lines.map(([label, text]) => (
+          <p key={label}>
+            <b>{label}:</b> {text}
+          </p>
+        ))}
         <p>
-          <b>Податок:</b> {Math.round(result.taxRate * 100)}% від суми «до податків», знімається одним рядком.
+          <b>Податок:</b> {f(result.gross)} × {Math.round(result.taxRate * 100)}% = −{f(result.tax)}, одним рядком
+          від усієї суми «до податків».
         </p>
-        {result.netExtras.length > 0 && (
-          <p>Рядки з позначкою «(чистими)» додаються чи віднімаються вже після податку.</p>
-        )}
-        {!showGross && <p>У режимі «На руки» кожен рядок показано вже без податку.</p>}
+        {result.netExtras.map((r) => (
+          <p key={r.id}>
+            <b>{r.label}:</b> {r.amount > 0 ? '+' : '−'}{f(Math.abs(r.amount))} уже чистими, після податку.
+          </p>
+        ))}
+        {!showGross && <p>У режимі «На руки» кожен рядок деталізації показано вже без податку (× {Math.round((1 - result.taxRate) * 100)}%).</p>}
       </div>
     </details>
   )
@@ -579,26 +596,33 @@ function Breakdown({ result, showGross }) {
           <span className={`v ${r.amount < 0 ? 'neg' : ''}`}>{fmtMoney(r.amount * k)}</span>
         </div>
       ))}
-      {result.netExtras.map((r) => (
-        <div className="sc-row" key={r.id}>
-          <span className="k">{r.label} (чистими)</span>
-          {/* у режимі «до податків» чистих сум не існує в брутто-світі — прочерк, не вигадане брутто */}
-          <span className={`v ${showGross ? 'dim' : r.amount < 0 ? 'neg' : ''}`}>
-            {showGross ? '—' : `${r.amount > 0 ? '+' : '−'}${fmtMoney(Math.abs(r.amount))}`}
-          </span>
-        </div>
-      ))}
+      {!showGross &&
+        result.netExtras.map((r) => (
+          <div className="sc-row" key={r.id}>
+            <span className="k">{r.label} (чистими)</span>
+            <span className={`v ${r.amount < 0 ? 'neg' : ''}`}>
+              {r.amount > 0 ? '+' : '−'}{fmtMoney(Math.abs(r.amount))}
+            </span>
+          </div>
+        ))}
       <div className="sc-row total">
         <span className="k">{showGross ? 'Разом до податків' : 'Разом на руки'}</span>
         <span className="v">{fmtMoney(showGross ? result.gross : result.totalNet)}</span>
       </div>
       {showGross && (
         <>
-          {/* довідково під підсумком: скільки з цього брутто піде податком і що лишиться */}
+          {/* довідково під підсумком: податок, чисті доплати (вигаданого брутто
+              для них не існує, але й зникати вони не повинні) і фінальне «на руки» */}
           <div className="sc-row ref">
             <span className="k">Податок {Math.round(result.taxRate * 100)}%</span>
             <span className="v dim">−{fmtMoney(result.tax)}</span>
           </div>
+          {result.netExtras.map((r) => (
+            <div className="sc-row ref" key={r.id}>
+              <span className="k">{r.label} (чистими)</span>
+              <span className="v dim">{r.amount > 0 ? '+' : '−'}{fmtMoney(Math.abs(r.amount))}</span>
+            </div>
+          ))}
           <div className="sc-row ref">
             <span className="k">На руки</span>
             <span className="v dim">{fmtMoney(result.totalNet)}</span>
