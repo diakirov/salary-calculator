@@ -135,6 +135,13 @@ input, select { font-family: inherit; }
 .sc-row.ref { border-bottom: 0; padding: 2px 0; }
 .sc-row.ref .k { font-size: 10.5px; }
 
+.sc-how { margin-top: 8px; }
+.sc-how summary { cursor: pointer; color: var(--sc-muted); font-size: 11px; user-select: none; }
+.sc-how summary:hover { color: var(--sc-text); }
+.sc-how-body { margin-top: 6px; }
+.sc-how-body p { margin: 0 0 6px; font-size: 11px; line-height: 1.45; color: var(--sc-muted); }
+.sc-how-body b { color: var(--sc-text); font-weight: 600; }
+
 /* ── Історія ── */
 .sc-history-divider { border-top: 1px solid var(--sc-line); margin: 9px 0 8px; }
 .sc-history-list { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; max-height: 180px; }

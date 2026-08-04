@@ -32,6 +32,8 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
   const [result, setResult] = useState(null)
   const [calcError, setCalcError] = useState(null)
   const [history, setHistory] = useState(loadHistory)
+  const [confirmedHours, setConfirmedHours] = useState(null) // «Ого, точно?» — підтверджене значення
+  const [copied, setCopied] = useState(false)
   const debounce = useRef(null)
   const calcSeq = useRef(0) // захист від гонки: повільна стара відповідь не затирає нову
 
@@ -78,7 +80,13 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
   const x2 = parseNum(form.x2Hours)
   const effWorked = worked ?? normHours ?? 0
   const errors = {}
-  if (worked != null && worked > 350) errors.workedHours = 'Скільки-скільки? 🤨'
+  // Мінус зараз недосяжний (normalizeHours його ріже), але якщо нормалізація
+  // колись зміниться — жарт уже чекає, а не NaN.
+  if (worked != null && worked < 0) errors.workedHours = 'Йойь, як таке можливо?🥹'
+  else if (worked != null && worked > 501) errors.workedHours = 'Ну стільки точно не зможеш😁'
+  // 302–501 — можливо, але підозріло: рахуємо лише після явного «так, точно»
+  const needsConfirm =
+    worked != null && worked > 301 && !errors.workedHours && confirmedHours !== worked
   if (night != null && night > effWorked) errors.nightHours = 'Не може бути більше, ніж відпрацьовані години 😅'
   // межа тут ширша, ніж для решти полів, але текст помилки той самий:
   // користувачу не потрібно знати внутрішню механіку множника
@@ -93,7 +101,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
       if (profile && normHours == null) setCalcError(`Норма годин для ${form.year} не задана`)
       return
     }
-    if (Object.keys(errors).length > 0) return // тримаємо попередній результат, показуємо помилку поля
+    if (Object.keys(errors).length > 0 || needsConfirm) return // тримаємо попередній результат, показуємо помилку/питання
 
     clearTimeout(debounce.current)
     debounce.current = setTimeout(() => {
@@ -121,7 +129,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
         .catch((e) => { if (seq !== calcSeq.current) return; setCalcError(e.message); if (e.status === 401) onLogout() })
     }, 180)
     return () => clearTimeout(debounce.current)
-  }, [profileId, JSON.stringify(form), versionId, normHours])
+  }, [profileId, JSON.stringify(form), versionId, normHours, needsConfirm])
 
   if (!meta || !profile) return null
 
@@ -140,6 +148,39 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
       form: { ...form },
     }
     setHistory(pushHistory(entry))
+  }
+
+  function copyResult() {
+    if (!result) return
+    const k = showGross ? 1 : 1 - result.taxRate
+    const lines = [
+      `${profile.name} · ${MONTH_NAMES[form.month]} ${form.year} · ${showGross ? 'до податків' : 'на руки'}`,
+    ]
+    for (const r of result.rows) lines.push(`${r.label}: ${fmtMoney(r.amount * k)}`)
+    for (const r of result.netExtras) {
+      lines.push(
+        showGross
+          ? `${r.label} (чистими): —`
+          : `${r.label} (чистими): ${r.amount > 0 ? '+' : '−'}${fmtMoney(Math.abs(r.amount))}`
+      )
+    }
+    lines.push(`Разом ${showGross ? 'до податків' : 'на руки'}: ${fmtMoney(showGross ? result.gross : result.totalNet)}`)
+    if (showGross) {
+      lines.push(`Податок ${Math.round(result.taxRate * 100)}%: −${fmtMoney(result.tax)}`)
+      lines.push(`На руки: ${fmtMoney(result.totalNet)}`)
+    }
+    if (result.version?.label) lines.push(`Ставки: ${result.version.label}`)
+    const text = lines.join('\n')
+
+    const done = () => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done))
+    } else {
+      fallbackCopy(text, done)
+    }
   }
 
   function restore(entry) {
@@ -258,6 +299,14 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
                   onChange={(e) => patch({ workedHours: normalizeHours(e.target.value, form.workedHours) })}
                 />
                 {errors.workedHours && <div className="sc-hint warn">{errors.workedHours}</div>}
+                {needsConfirm && (
+                  <div className="sc-hint warn">
+                    Ого, точно стільки відпрацюєш?👀{' '}
+                    <button type="button" className="sc-link-btn" onClick={() => setConfirmedHours(worked)}>
+                      Так, точно
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="sc-field">
@@ -354,6 +403,9 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
               </div>
               <div className="sc-hero-actions">
                 <button className="sc-btn" onClick={saveToHistory} disabled={!result}>Зберегти в історію</button>
+                <button className="sc-btn ghost" onClick={copyResult} disabled={!result}>
+                  {copied ? 'Скопійовано ✓' : 'Скопіювати'}
+                </button>
                 <button className="sc-btn ghost" onClick={resetAll}>Скинути</button>
               </div>
             </div>
@@ -361,6 +413,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
             <div className="sc-panel">
               <h2>Деталізація</h2>
               <Breakdown result={result} showGross={showGross} />
+              <HowCalculated result={result} showGross={showGross} />
               <div className="sc-history-divider" />
               <h2 style={{ margin: '0 0 6px' }}>Історія</h2>
               {history.length === 0 ? (
@@ -436,6 +489,61 @@ function ExtrasFields({ profile, form, patch }) {
         </div>
       )}
     </>
+  )
+}
+
+/** Фолбек копіювання для WebKit без clipboard API (http, старі iOS). */
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  try { document.execCommand('copy'); done() } catch { /* мовчки: гірше не стало */ }
+  document.body.removeChild(ta)
+}
+
+/**
+ * Пояснення до рядків — лише загальна механіка розрахунку, без жодного числа
+ * поза тими, що вже є у відповіді. Ключі — стабільні id рядків рушія.
+ */
+const HOW_BY_ID = {
+  salary: 'оклад × (відпрацьовані години / норма)',
+  zone: 'надбавка зони × (відпрацьовані години / норма)',
+  qual: 'надбавка кваліфікації × (відпрацьовані години / норма)',
+  tenure: 'база вислуги × відсоток за рік × повні роки × (відпрацьовані / норма)',
+  night: 'погодинна ставка × нічні години × нічний коефіцієнт',
+  x2: '(оклад + надбавка зони) / норма × години х2 — перша половина цих годин уже у відпрацьованих',
+}
+
+function HowCalculated({ result, showGross }) {
+  if (!result) return null
+  const pct = Math.round((result.effectiveHours / result.normHours) * 1000) / 10
+  return (
+    <details className="sc-how">
+      <summary>Як пораховано</summary>
+      <div className="sc-how-body">
+        <p>
+          Частка місяця: {result.effectiveHours} год із норми {result.normHours} = {pct}%.
+          Всі «пропорційні» рядки множаться саме на неї.
+        </p>
+        {result.rows.map((r) =>
+          HOW_BY_ID[r.id] ? (
+            <p key={r.id}>
+              <b>{r.label}:</b> {HOW_BY_ID[r.id]}
+            </p>
+          ) : null
+        )}
+        <p>
+          <b>Податок:</b> {Math.round(result.taxRate * 100)}% від суми «до податків», знімається одним рядком.
+        </p>
+        {result.netExtras.length > 0 && (
+          <p>Рядки з позначкою «(чистими)» додаються чи віднімаються вже після податку.</p>
+        )}
+        {!showGross && <p>У режимі «На руки» кожен рядок показано вже без податку.</p>}
+      </div>
+    </details>
   )
 }
 
