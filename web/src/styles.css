@@ -180,6 +180,12 @@ input, select { font-family: inherit; }
 .sc-norm-grid input { width: 100%; background: var(--sc-panel-2); border: 1px solid var(--sc-line); border-radius: 6px; color: var(--sc-text); font-size: 11.5px; padding: 4px; text-align: center; }
 .sc-error { color: var(--sc-neg); font-size: 12px; }
 .sc-ok { color: #2fbd6c; font-size: 12px; }
+.sc-confirm { border-color: var(--sc-warn-border); background: var(--sc-warn-bg); }
+.sc-difflist { display: flex; flex-direction: column; margin: 4px 0; }
+.sc-difflist .k { word-break: break-all; margin-right: 10px; }
+.sc-audit-item summary { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; padding: 6px 8px; background: var(--sc-panel-2); border-radius: 8px; cursor: pointer; list-style: none; }
+.sc-audit-item[open] summary { border-radius: 8px 8px 0 0; }
+.sc-audit-item .sc-difflist { padding: 4px 8px; background: var(--sc-panel-2); border-radius: 0 0 8px 8px; }
 
 /* ── Мобільна версія ─────────────────────────────────────────────────────
    Три головні проблеми телефона: iOS зумить будь-який контрол зі шрифтом

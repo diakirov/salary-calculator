@@ -106,6 +106,33 @@ export function getNormHours(config, { year, monthIndex, schedule }) {
   return config.normHours?.[year]?.[schedule]?.[monthIndex] ?? null
 }
 
+// ── Бекапи: список і читання для відкату з адмінки ───────────────────────
+
+const BACKUP_NAME = /^config-[\dTZ-]+\.json$/
+
+export function listBackups() {
+  const dir = path.join(path.dirname(CONFIG_PATH), 'backups')
+  if (!fs.existsSync(dir)) return []
+  return fs
+    .readdirSync(dir)
+    .filter((n) => BACKUP_NAME.test(n))
+    .map((n) => {
+      const st = fs.statSync(path.join(dir, n))
+      return { name: n, size: st.size, createdAt: st.mtime.toISOString() }
+    })
+    .sort((a, b) => b.name.localeCompare(a.name)) // найновіші згори
+}
+
+/** Прочитати бекап за імʼям. Кидає INVALID_CONFIG, якщо вміст не проходить валідацію. */
+export function readBackup(name) {
+  if (!BACKUP_NAME.test(name)) return null
+  const p = path.join(path.dirname(CONFIG_PATH), 'backups', name)
+  if (!fs.existsSync(p)) return null
+  const parsed = JSON.parse(fs.readFileSync(p, 'utf-8'))
+  assertValidConfig(parsed)
+  return parsed
+}
+
 function fail(msg) {
   const err = new Error(`Невалідний конфіг: ${msg}`)
   err.code = 'INVALID_CONFIG'
