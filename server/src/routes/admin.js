@@ -1,15 +1,32 @@
 import { loadConfig, saveConfig } from '../config-store.js'
+import { rateLimitKey } from '../lib/auth.js'
+
+/** Помилки валідації конфігу → 422 з текстом; усе інше (fs тощо) → нагору, у generic 500. */
+function saveOr422(reply, config) {
+  try {
+    saveConfig(config)
+    return null
+  } catch (e) {
+    if (e.code === 'INVALID_CONFIG') return reply.code(422).send({ error: e.message })
+    throw e
+  }
+}
 
 export default async function adminRoutes(app) {
   app.addHook('preHandler', async (req, reply) => {
-    if (!req.url.startsWith('/api/admin/')) return
     if (!req.session?.admin) {
       reply.code(403).send({ error: 'Лише для адміністратора' })
     }
   })
 
+  const writeLimit = { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: rateLimitKey } }
+
   // Повний конфіг — з реальними числами; це і є екран редагування.
-  app.get('/api/admin/config', async () => loadConfig())
+  app.get(
+    '/api/admin/config',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute', keyGenerator: rateLimitKey } } },
+    async () => loadConfig()
+  )
 
   /**
    * Нова версія ставок «застосувати з дати». Стара версія лишається
@@ -20,6 +37,7 @@ export default async function adminRoutes(app) {
   app.post(
     '/api/admin/versions',
     {
+      config: writeLimit,
       schema: {
         body: {
           type: 'object',
@@ -48,11 +66,7 @@ export default async function adminRoutes(app) {
       const next = { ...version, id, label, effectiveFrom }
       config.rateVersions = [...config.rateVersions.filter((v) => v.effectiveFrom !== effectiveFrom), next]
 
-      try {
-        saveConfig(config)
-      } catch (e) {
-        return reply.code(422).send({ error: e.message })
-      }
+      if (saveOr422(reply, config)) return
       return { ok: true, id }
     }
   )
@@ -61,6 +75,7 @@ export default async function adminRoutes(app) {
   app.post(
     '/api/admin/norm-hours',
     {
+      config: writeLimit,
       schema: {
         body: {
           type: 'object',
@@ -84,11 +99,7 @@ export default async function adminRoutes(app) {
       const { year, schedules } = req.body
       const config = structuredClone(loadConfig())
       config.normHours[year] = schedules
-      try {
-        saveConfig(config)
-      } catch (e) {
-        return reply.code(422).send({ error: e.message })
-      }
+      if (saveOr422(reply, config)) return
       return { ok: true }
     }
   )

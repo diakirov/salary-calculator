@@ -7,22 +7,56 @@
 import Fastify from 'fastify'
 import cookie from '@fastify/cookie'
 import rateLimit from '@fastify/rate-limit'
+import compress from '@fastify/compress'
 import fastifyStatic from '@fastify/static'
 import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
 import { loadConfig } from './config-store.js'
-import { COOKIE_NAME, readSession, cookieOptions } from './lib/auth.js'
+import { COOKIE_NAME, readSession } from './lib/auth.js'
 import authRoutes from './routes/auth.js'
 import calcRoutes from './routes/calc.js'
 import adminRoutes from './routes/admin.js'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
-const app = Fastify({ logger: true, trustProxy: true })
+// trustProxy НЕ true: X-Forwarded-For віримо лише локальному проксі (Caddy через
+// docker-міст), інакше клієнт підробкою заголовка обходить rate-limit за IP.
+const app = Fastify({ logger: true, trustProxy: 'loopback, uniquelocal' })
 
 await app.register(cookie)
 await app.register(rateLimit, { global: false })
+await app.register(compress) // Caddy у цій інсталяції не стискає — стискаємо самі
+
+// 5xx назовні — лише узагальнений текст: у err.message бувають шляхи
+// файлової системи та деталі оточення. Все справжнє — у лог.
+app.setErrorHandler((err, req, reply) => {
+  const status = err.statusCode && err.statusCode < 500 ? err.statusCode : 500
+  if (status < 500) return reply.code(status).send({ error: err.message })
+  req.log.error(err)
+  return reply.code(500).send({ error: 'Внутрішня помилка' })
+})
+
+// Заголовки безпеки тут, а не в reverse proxy: Caddyfile на сервері спільний
+// з іншими сервісами, а ці правила — властивість застосунку.
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'", // React ставить inline style-атрибути
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join('; ')
+app.addHook('onSend', async (req, reply) => {
+  reply.header('Strict-Transport-Security', 'max-age=15552000')
+  reply.header('X-Content-Type-Options', 'nosniff')
+  reply.header('Referrer-Policy', 'no-referrer')
+  reply.header('Content-Security-Policy', CSP)
+  if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store')
+})
 
 // Перевірка конфігу на старті — краще впасти одразу, ніж 500 на першому запиті.
 loadConfig()
@@ -53,8 +87,9 @@ if (fs.existsSync(brandingDir)) {
     root: brandingDir,
     prefix: '/branding/',
     decorateReply: true,
-    setHeaders(res) {
-      res.setHeader('Cache-Control', 'private, max-age=3600')
+    // v10: setHeaders отримує Reply, не сирий res
+    setHeaders(reply) {
+      reply.header('Cache-Control', 'private, max-age=3600')
     },
   })
   app.addHook('onRequest', async (req, reply) => {
@@ -93,7 +128,18 @@ app.get('/healthz', async (req, reply) => {
 // Статика фронтенду (web/dist), SPA-fallback на index.html
 const webDist = process.env.WEB_DIST || path.resolve(here, '../../web/dist')
 if (fs.existsSync(webDist)) {
-  await app.register(fastifyStatic, { root: webDist, prefix: '/', decorateReply: !fs.existsSync(brandingDir) })
+  await app.register(fastifyStatic, {
+    root: webDist,
+    prefix: '/',
+    decorateReply: !fs.existsSync(brandingDir),
+    // v10: setHeaders отримує Reply, не сирий res
+    setHeaders(reply, filePath) {
+      // Хешовані бандли — назавжди; шрифти незмінні — надовго; решта — ревалідація.
+      if (/[/\\]assets[/\\]/.test(filePath)) reply.header('Cache-Control', 'public, max-age=31536000, immutable')
+      else if (/[/\\]fonts[/\\]/.test(filePath)) reply.header('Cache-Control', 'public, max-age=2592000')
+      else reply.header('Cache-Control', 'no-cache')
+    },
+  })
   app.setNotFoundHandler((req, reply) => {
     if (req.url.startsWith('/api/') || req.url.startsWith('/branding/')) {
       return reply.code(404).send({ error: 'Не знайдено' })

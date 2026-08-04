@@ -72,6 +72,17 @@ export function readSession(token) {
 
 export const COOKIE_NAME = 'sc_session'
 
+/**
+ * Ключ для rate-limit: хеш сесійного токена, а не IP. Уся команда може сидіти
+ * за одним корпоративним виходом — лімітувати треба людину, не офіс. Хеш, а не
+ * сам токен, щоб токени не лежали в памʼяті лімітера. Без сесії — фолбек на IP.
+ */
+export function rateLimitKey(req) {
+  const token = req.cookies?.[COOKIE_NAME]
+  if (!token) return 'ip:' + req.ip
+  return 's:' + crypto.createHash('sha256').update(token).digest('base64url').slice(0, 24)
+}
+
 export const cookieOptions = {
   httpOnly: true,
   secure: process.env.NODE_ENV !== 'development',

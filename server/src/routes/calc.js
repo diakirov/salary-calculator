@@ -2,6 +2,7 @@ import { loadConfig, getNormHours } from '../config-store.js'
 import { calculate, CalcError } from '../engine/calculate.js'
 import { resolveVersion } from '../engine/resolveVersion.js'
 import { profilesView, versionStatusFor } from '../lib/publicView.js'
+import { rateLimitKey } from '../lib/auth.js'
 
 const todayKey = () => new Date().toISOString().slice(0, 10)
 
@@ -13,6 +14,10 @@ export default async function calcRoutes(app) {
   app.post(
     '/api/calc',
     {
+      config: {
+        // Людина з дебаунсом 180 мс так не настукає; перебір сітки ставок — так.
+        rateLimit: { max: 60, timeWindow: '1 minute', keyGenerator: rateLimitKey },
+      },
       schema: {
         body: {
           type: 'object',
