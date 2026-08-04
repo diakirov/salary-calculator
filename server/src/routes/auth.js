@@ -1,4 +1,4 @@
-import { verifyPassword, issueSession, COOKIE_NAME, cookieOptions } from '../lib/auth.js'
+import { verifyPassword, issueSession, roles, COOKIE_NAME, cookieOptions } from '../lib/auth.js'
 
 export default async function authRoutes(app) {
   app.post(
@@ -21,7 +21,9 @@ export default async function authRoutes(app) {
         return reply.code(401).send({ error: 'Невірний пароль' })
       }
       reply.setCookie(COOKIE_NAME, issueSession(role), cookieOptions)
-      return { role }
+      // Та сама форма, що /api/me: клієнту після логіна не треба другий запит.
+      const meta = roles()[role] ?? {}
+      return { role, isAdmin: !!meta.admin, title: meta.title ?? null }
     }
   )
 

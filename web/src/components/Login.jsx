@@ -12,9 +12,7 @@ export default function Login({ onLogin }) {
     setBusy(true)
     setError('')
     try {
-      await api.login(password)
-      const me = await api.me()
-      onLogin(me)
+      onLogin(await api.login(password))
     } catch (err) {
       setError(err.status === 429 ? 'Забагато спроб — зачекай 15 хвилин' : 'Невірний пароль')
       setBusy(false)
