@@ -35,6 +35,11 @@ test('розрахункові листи сходяться до копійки
       assert.ok(actual != null, `${c.name}: рядок ${rowId} відсутній`)
       assert.ok(Math.abs(actual - expected) <= 0.011, `${c.name}: ${rowId} = ${actual}, очікували ${expected}`)
     }
+
+    // Внутрішня замкненість: брутто = сума оподатковуваних рядків. Саме цей
+    // клас розбіжностей (рядок, що оминає брутто) колись пройшов непоміченим.
+    const rowSum = result.rows.reduce((s, r) => s + r.amount, 0)
+    assert.ok(Math.abs(result.gross - rowSum) <= 0.005, `${c.name}: gross ${result.gross} ≠ Σрядків ${rowSum}`)
   }
 })
 

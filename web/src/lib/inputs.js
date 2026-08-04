@@ -53,11 +53,6 @@ export function fmtMoney(n) {
   return `${Math.round(n).toLocaleString('uk-UA')} ₴`
 }
 
-export function fmtMoneyExact(n) {
-  if (n == null) return '—'
-  return `${n.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴`
-}
-
 export const MONTH_NAMES = [
   'Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень',
   'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень',

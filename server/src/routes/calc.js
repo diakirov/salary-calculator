@@ -8,7 +8,7 @@ const todayKey = () => new Date().toISOString().slice(0, 10)
 
 export default async function calcRoutes(app) {
   app.get('/api/profiles', async (req) => {
-    return profilesView(loadConfig(), req.session, todayKey())
+    return profilesView(loadConfig(), req.session)
   })
 
   app.post(

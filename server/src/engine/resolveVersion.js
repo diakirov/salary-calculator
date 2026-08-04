@@ -49,8 +49,9 @@ export function versionSpan(versions, id) {
   }
 }
 
-function sortVersions(versions) {
-  return [...versions].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
+/** Єдиний компаратор версій на весь проєкт — щоб порядок ніде не розходився. */
+export function sortVersions(versions) {
+  return [...versions].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : a.effectiveFrom > b.effectiveFrom ? 1 : 0))
 }
 
 function pickForMonth(sorted, monthKey) {
@@ -62,7 +63,7 @@ function pickForMonth(sorted, monthKey) {
   return found
 }
 
-function dayBefore(isoDate) {
+export function dayBefore(isoDate) {
   const d = new Date(`${isoDate}T00:00:00Z`)
   d.setUTCDate(d.getUTCDate() - 1)
   return d.toISOString().slice(0, 10)

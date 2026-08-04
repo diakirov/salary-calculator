@@ -1,5 +1,6 @@
 import { loadConfig, saveConfig } from '../config-store.js'
 import { rateLimitKey } from '../lib/auth.js'
+import { sortVersions } from '../engine/resolveVersion.js'
 
 /** Помилки валідації конфігу → 422 з текстом; усе інше (fs тощо) → нагору, у generic 500. */
 function saveOr422(reply, config) {
@@ -64,7 +65,8 @@ export default async function adminRoutes(app) {
 
       const id = effectiveFrom.slice(0, 7)
       const next = { ...version, id, label, effectiveFrom }
-      config.rateVersions = [...config.rateVersions.filter((v) => v.effectiveFrom !== effectiveFrom), next]
+      // Одразу в хронологічному порядку: на ньому тримаються і резолв, і списки в UI.
+      config.rateVersions = sortVersions([...config.rateVersions.filter((v) => v.effectiveFrom !== effectiveFrom), next])
 
       if (saveOr422(reply, config)) return
       return { ok: true, id }

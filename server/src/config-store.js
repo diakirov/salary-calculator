@@ -75,6 +75,20 @@ export function assertValidConfig(config) {
       for (const extra of p.extras ?? []) {
         if (!extra.id || !extra.label) fail(`${pid}: extra без id/label`)
         if (typeof extra.taxable !== 'boolean') fail(`${pid}/${extra.id}: taxable має бути явним`)
+        // Без цих перевірок count-extra без amount дає NaN у сумі — і Fastify
+        // мовчки віддає null замість числа.
+        if (extra.kind != null && extra.kind !== 'count' && extra.kind !== 'money') {
+          fail(`${pid}/${extra.id}: kind має бути count або money`)
+        }
+        if (extra.kind === 'count' && !(typeof extra.amount === 'number' && extra.amount > 0)) {
+          fail(`${pid}/${extra.id}: count-extra без додатного amount`)
+        }
+        if (extra.max != null && !(Number.isInteger(extra.max) && extra.max > 0)) {
+          fail(`${pid}/${extra.id}: max має бути цілим додатним`)
+        }
+        if (extra.sign != null && extra.sign !== 1 && extra.sign !== -1) {
+          fail(`${pid}/${extra.id}: sign має бути 1 або -1`)
+        }
       }
     }
   }

@@ -93,3 +93,54 @@ test('другий етап профілю: інші надбавки за рі�
   assert.equal(lt3.rows.find((x) => x.id === 'zone').amount, 3000)
   assert.equal(gte3.rows.find((x) => x.id === 'zone').amount, 5000)
 })
+
+test('нічних більше, ніж відпрацьованих → помилка розрахунку', () => {
+  assert.throws(
+    () => calculate({ rates, normHours: 176, input: { ...base, workedHours: 10, nightHours: 11 } }),
+    (e) => e.code === 'NIGHT_GT_WORKED'
+  )
+  // знання додає годину — 11 нічних при 10+знання проходить
+  calculate({ rates, normHours: 176, input: { ...base, workedHours: 10, knowledge: true, nightHours: 11 } })
+})
+
+test('подвоєних більше за 2×відпрацьовані → помилка розрахунку', () => {
+  assert.throws(
+    () => calculate({ rates, normHours: 176, input: { ...base, workedHours: 10, x2Hours: 21 } }),
+    (e) => e.code === 'X2_GT_WORKED'
+  )
+})
+
+test('відʼємний оподатковуваний extra зменшує брутто', () => {
+  const plain = calculate({ rates, normHours: 176, input: base })
+  const r = calculate({ rates, normHours: 176, input: { ...base, extras: { fine: 300 } } })
+  const row = r.rows.find((x) => x.id === 'fine')
+  if (row) {
+    assert.equal(row.amount, -300)
+    assert.equal(r.gross, round2(plain.gross - 300))
+  } else {
+    // у прикладному конфізі немає оподатковуваного відʼємного extra —
+    // перевіряємо на синтетичному профілі, щоб гілка не лишалась без тесту
+    const custom = structuredClone(rates)
+    custom.profiles['role-a'].extras = [
+      { id: 'fine', label: 'Утримання (тест)', kind: 'money', taxable: true, sign: -1 },
+    ]
+    const r2 = calculate({ rates: custom, normHours: 176, input: { ...base, extras: { fine: 300 } } })
+    assert.equal(r2.rows.find((x) => x.id === 'fine').amount, -300)
+    assert.equal(r2.gross, round2(plain.gross - 300))
+  }
+})
+
+test('валідація extras: невідомий kind, count без amount, кривий sign — відхиляються', () => {
+  const broken = (patch) => {
+    const c = structuredClone(example)
+    c.rateVersions[0].profiles['role-a'].extras = [
+      { id: 'x', label: 'X', taxable: true, ...patch },
+    ]
+    return c
+  }
+  assert.throws(() => assertValidConfig(broken({ kind: 'weird' })), /kind/)
+  assert.throws(() => assertValidConfig(broken({ kind: 'count' })), /amount/)
+  assert.throws(() => assertValidConfig(broken({ sign: 100 })), /sign/)
+  assert.throws(() => assertValidConfig(broken({ max: 2.5 })), /max/)
+  assertValidConfig(broken({ kind: 'count', amount: 300, max: 5 })) // здоровий — проходить
+})

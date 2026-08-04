@@ -35,7 +35,16 @@ export function calculate({ rates, normHours, input }) {
   const effectiveHours = workedHours + knowledgeHours
   const share = effectiveHours / normHours
 
-  const qualBonus = resolveQualBonus(profile.qualLevels, input.qualId, zone.id)
+  // Крос-перевірки погодинних полів — тут, а не лише в UI: схема руту
+  // перевіряє кожне поле окремо і цю залежність не бачить.
+  if (num(input.nightHours) > effectiveHours) {
+    throw new CalcError('NIGHT_GT_WORKED', 'Нічних годин не може бути більше, ніж відпрацьованих')
+  }
+  if (num(input.x2Hours) > workedHours * 2) {
+    throw new CalcError('X2_GT_WORKED', 'Подвоєних годин не може бути більше, ніж відпрацьованих')
+  }
+
+  const qual = resolveQual(profile.qualLevels, input.qualId, zone)
   const tenureBonus = resolveTenureBase(profile, rates, input.tenureYears)
 
   // Назви рядків — теж дані: беремо з конфігу, у коді лишаються тільки
@@ -48,7 +57,7 @@ export function calculate({ rates, normHours, input }) {
     row('zone', L.zone ?? 'Надбавка за рівень', zone.premium * share),
   ]
 
-  if (qualBonus > 0) rows.push(row('qual', L.qual ?? 'Надбавка за кваліфікацію', qualBonus * share))
+  if (qual.bonus > 0) rows.push(row('qual', L.qual ?? 'Надбавка за кваліфікацію', qual.bonus * share))
   if (tenureBonus > 0) rows.push(row('tenure', L.tenure ?? 'Надбавка за вислугу', tenureBonus * share))
 
   const nightHours = num(input.nightHours)
@@ -65,7 +74,6 @@ export function calculate({ rates, normHours, input }) {
   }
 
   // ── Довільні рядки з конфігу: разові доплати й утримання ──────────────
-  const taxableExtras = []
   const netExtras = []
 
   for (const extra of profile.extras ?? []) {
@@ -73,11 +81,9 @@ export function calculate({ rates, normHours, input }) {
     if (amount === 0) continue
     const signed = amount * (extra.sign ?? 1)
     const entry = row(extra.id, extra.label, signed)
-    if (extra.taxable) taxableExtras.push(entry)
+    if (extra.taxable) rows.push(entry)
     else netExtras.push(entry)
   }
-
-  for (const entry of taxableExtras) rows.push(entry)
 
   // ── Підсумки ──────────────────────────────────────────────────────────
   const gross = round2(rows.reduce((sum, r) => sum + r.amount, 0))
@@ -92,7 +98,7 @@ export function calculate({ rates, normHours, input }) {
     hourlyRate: round2(profile.baseSalary / normHours),
     zone: { id: zone.id, label: zone.label, color: zone.color },
     stage: { id: stage.id, label: stage.label },
-    qualNote: qualNote(profile.qualLevels, input.qualId, zone),
+    qualNote: qual.note,
     rows,               // оподатковувані — показуються в обох режимах
     netExtras,          // чисті — у режимі «до податків» їх немає
     gross,
@@ -132,30 +138,26 @@ function pickStage(profile, stageId) {
  * «не нижче N» — це zoneId <= N. Профіль може задати `degradeAtZone`:
  * на вказаному рівні надбавка виплачується за ставкою іншої кваліфікації
  * (`degradeTo`), а не обнуляється.
+ *
+ * Сума і пояснення рахуються разом — раніше це були дві функції з однаковими
+ * гілками, і вони встигли розійтись (нота показувала «оплачується як “”»
+ * там, де сума вже була нулем).
  */
-function resolveQualBonus(qualLevels, qualId, zoneId) {
+function resolveQual(qualLevels, qualId, zone) {
   const level = qualLevels.find((q) => q.id === qualId)
-  if (!level || !level.bonus) return 0
+  if (!level || !level.bonus) return { bonus: 0, note: null }
 
-  if (level.degradeAtZone != null && zoneId === level.degradeAtZone) {
-    const fallback = qualLevels.find((q) => q.id === level.degradeTo)
-    return fallback?.bonus ?? 0
-  }
-  if (level.minZone != null && zoneId > level.minZone) return 0
-  return level.bonus
-}
-
-function qualNote(qualLevels, qualId, zone) {
-  const level = qualLevels.find((q) => q.id === qualId)
-  if (!level || !level.bonus) return null
   if (level.degradeAtZone != null && zone.id === level.degradeAtZone) {
     const fallback = qualLevels.find((q) => q.id === level.degradeTo)
-    return `«${zone.label}»: «${level.label}» оплачується як «${fallback?.label ?? ''}»`
+    if (!fallback?.bonus) {
+      return { bonus: 0, note: `«${zone.label}»: надбавка за «${level.label}» не виплачується` }
+    }
+    return { bonus: fallback.bonus, note: `«${zone.label}»: «${level.label}» оплачується як «${fallback.label}»` }
   }
   if (level.minZone != null && zone.id > level.minZone) {
-    return `«${zone.label}»: надбавка за «${level.label}» не виплачується`
+    return { bonus: 0, note: `«${zone.label}»: надбавка за «${level.label}» не виплачується` }
   }
-  return null
+  return { bonus: level.bonus, note: null }
 }
 
 /**

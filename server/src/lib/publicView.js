@@ -4,10 +4,11 @@
  * Принцип: браузер отримує СТРУКТУРУ (які поля, які зони, які місяці),
  * але не ЧИСЛА (оклади, премії, надбавки). Рахує сервер.
  */
-import { versionStatus, versionSpan } from '../engine/resolveVersion.js'
+import { versionStatus, sortVersions, dayBefore } from '../engine/resolveVersion.js'
 
-export function profilesView(config, session, todayKey) {
-  const latest = [...config.rateVersions].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).at(-1)
+export function profilesView(config, session) {
+  const sorted = sortVersions(config.rateVersions)
+  const latest = sorted.at(-1)
 
   const profiles = {}
   for (const id of session.profiles) {
@@ -33,11 +34,13 @@ export function profilesView(config, session, todayKey) {
     normHours: config.normHours, // норми годин — не секрет, вони в кожній презентації
     years: Object.keys(config.normHours),
     maxTenureYears: latest.maxTenureYears,
-    versions: config.rateVersions.map((v) => ({
+    // Періоди дії за один прохід по вже відсортованому списку:
+    // кінець версії — день перед наступною, остання відкрита (to: null).
+    versions: sorted.map((v, i) => ({
       id: v.id,
       label: v.label,
       effectiveFrom: v.effectiveFrom,
-      span: versionSpan(config.rateVersions, v.id),
+      span: { from: v.effectiveFrom, to: sorted[i + 1] ? dayBefore(sorted[i + 1].effectiveFrom) : null },
     })),
     role: session.role,
     isAdmin: session.admin,
