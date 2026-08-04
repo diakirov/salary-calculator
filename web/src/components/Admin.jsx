@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { api } from '../api.js'
+import { ThemeButton } from './Calculator.jsx'
 
 function fmtDate(iso) {
   if (!iso) return ''
@@ -154,6 +155,7 @@ export default function Admin({ onBack }) {
             <p>Небезпечні зміни завжди показують «було → стало» і чекають підтвердження</p>
           </div>
           <div className="sc-header-right">
+            <ThemeButton />
             <button className="sc-link-btn" onClick={onBack}>← До калькулятора</button>
           </div>
         </div>

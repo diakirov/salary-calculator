@@ -3,6 +3,21 @@ import { api } from '../api.js'
 import { loadState, saveState, loadHistory, pushHistory, clearAll } from '../store.js'
 import { normalizeHours, normalizeMoney, normalizeDigits, parseNum, fmtMoney, MONTH_NAMES } from '../lib/inputs.js'
 import VersionBar from './VersionBar.jsx'
+import { currentTheme, toggleTheme } from '../theme.js'
+
+/** Перемикач теми: ☾ у світлій пропонує темну, ☀ навпаки. */
+export function ThemeButton() {
+  const [theme, setTheme] = useState(currentTheme)
+  return (
+    <button
+      className="sc-link-btn"
+      title={theme === 'light' ? 'Темна тема' : 'Світла тема'}
+      onClick={() => setTheme(toggleTheme())}
+    >
+      {theme === 'light' ? '☾' : '☀'}
+    </button>
+  )
+}
 
 const now = new Date()
 
@@ -207,6 +222,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
             <p>Внутрішній інструмент</p>
           </div>
           <div className="sc-header-right">
+            <ThemeButton />
             {onAdmin && <button className="sc-link-btn" onClick={onAdmin}>Адмінка</button>}
             <button className="sc-link-btn" onClick={onLogout}>Вийти</button>
             <div className="sc-role">{auth.title ?? auth.role}</div>
