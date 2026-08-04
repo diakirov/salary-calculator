@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Server deps
+        working-directory: server
+        run: npm ci
+      - name: Tests (приватні payslip-фікстури в CI відсутні — скіпаються)
+        working-directory: server
+        run: npm test
+      - name: Web build
+        working-directory: web
+        run: npm ci && npm run build
+      - name: Guard — приватні файли не закомічені
+        run: |
+          test ! -e config/config.json
+          test ! -d branding
+          test ! -d server/test/fixtures/private
+          test ! -e .env

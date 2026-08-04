@@ -1,0 +1,45 @@
+# Ізольований контейнер калькулятора. Ліміти жорсткі свідомо:
+# сервер спільний з іншими сервісами, і в них вищий пріоритет.
+# При виході за ліміти страждає сам калькулятор, не сусіди.
+services:
+  salary-calculator:
+    build: .
+    container_name: salary-calculator
+    restart: unless-stopped
+    read_only: true
+    mem_limit: 256m
+    mem_reservation: 96m
+    cpus: 0.35
+    pids_limit: 128
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=16m
+    volumes:
+      - ./data:/data          # config.json + branding/ — поза git, тільки тут
+    # env_file, а не environment: argon2-хеші містять «$», який
+    # compose-інтерполяція в environment сприймає як змінні й затирає.
+    env_file:
+      - path: ./secrets.env
+        required: true
+        format: raw   # без інтерполяції: в argon2-хешах є «$»
+    ports:
+      - "127.0.0.1:8093:8080"  # назовні — лише через reverse proxy
+    healthcheck:
+      # node без залежностей: у образі немає ні curl, ні wget
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    networks:
+      - salary_net
+
+networks:
+  salary_net:
+    driver: bridge

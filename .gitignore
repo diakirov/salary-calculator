@@ -1,0 +1,13 @@
+# Реальні дані — ніколи в git.
+config/
+branding/
+server/test/fixtures/private/
+.env
+.env.*
+secrets.env
+data/
+
+node_modules/
+dist/
+*.log
+.DS_Store

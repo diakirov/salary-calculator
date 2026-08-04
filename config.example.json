@@ -1,0 +1,111 @@
+{
+  "$comment": "ПРИКЛАД конфігу. Домен тут вигаданий: профілі, рівні, надбавки й суми не описують нічиєї реальної схеми оплати — це лише демонстрація структури. Робочий config.json живе поза репозиторієм (Docker-волюм) і має такий самий вигляд.",
+
+  "roles": {
+    "admin": { "title": "Адміністратор", "profiles": ["role-a", "role-b"], "admin": true },
+    "manager": { "title": "Менеджер", "profiles": ["role-a", "role-b"], "admin": false },
+    "staff": { "title": "Співробітник", "profiles": ["role-b"], "admin": false }
+  },
+
+  "rateVersions": [
+    {
+      "id": "2026-01",
+      "label": "Приклад ставок",
+      "effectiveFrom": "2026-01-01",
+      "taxRate": 0.2,
+      "nightMultiplier": 0.2,
+      "tenurePercentPerYear": 0.05,
+      "maxTenureYears": 30,
+
+      "labels": {
+        "salary": "Ставка",
+        "zone": "Надбавка за рівень",
+        "qual": "Надбавка за кваліфікацію",
+        "tenure": "Надбавка за вислугу",
+        "night": "Нічні години",
+        "x2": "Подвоєні години"
+      },
+
+      "profiles": {
+        "role-a": {
+          "name": "Профіль A",
+          "description": "Приклад: одна група рівнів",
+          "baseSalary": 50000,
+          "tenureBaseIncome": 60000,
+          "stages": [
+            {
+              "id": "main",
+              "label": "Основний",
+              "default": true,
+              "zones": [
+                { "id": 1, "label": "Рівень 1", "color": "#2FBD6C", "premium": 8000 },
+                { "id": 2, "label": "Рівень 2", "color": "#8BC53F", "premium": 5000 },
+                { "id": 3, "label": "Рівень 3", "color": "#F0C419", "premium": 3000 },
+                { "id": 4, "label": "Рівень 4", "color": "#F472B6", "premium": 1500 },
+                { "id": 5, "label": "Рівень 5", "color": "#EF4444", "premium": 0 }
+              ]
+            }
+          ],
+          "qualLevels": [
+            { "id": 1, "label": "Кваліфікація I", "bonus": 0 },
+            { "id": 2, "label": "Кваліфікація II", "bonus": 2000, "minZone": 3 },
+            { "id": 3, "label": "Кваліфікація III", "bonus": 3500, "minZone": 2, "degradeAtZone": 3, "degradeTo": 2 }
+          ],
+          "extras": [
+            { "id": "bonus", "label": "Разовий бонус", "kind": "count", "amount": 300, "max": 5, "taxable": false, "sign": 1 },
+            { "id": "reimbursement", "label": "Компенсації", "kind": "money", "taxable": false, "sign": 1 },
+            { "id": "deduction", "label": "Утримання", "kind": "money", "taxable": false, "sign": -1 }
+          ]
+        },
+
+        "role-b": {
+          "name": "Профіль B",
+          "description": "Приклад: дві групи рівнів за етапом",
+          "baseSalary": 20000,
+          "tenureBaseIncome": 40000,
+          "stages": [
+            {
+              "id": "stage-1",
+              "label": "Етап 1",
+              "zones": [
+                { "id": 1, "label": "Рівень 1", "color": "#2FBD6C", "premium": 6000 },
+                { "id": 2, "label": "Рівень 2", "color": "#8BC53F", "premium": 4500 },
+                { "id": 3, "label": "Рівень 3", "color": "#F0C419", "premium": 3000 },
+                { "id": 4, "label": "Рівень 4", "color": "#F472B6", "premium": 1500 },
+                { "id": 5, "label": "Рівень 5", "color": "#EF4444", "premium": 500 }
+              ]
+            },
+            {
+              "id": "stage-2",
+              "label": "Етап 2",
+              "default": true,
+              "zones": [
+                { "id": 1, "label": "Рівень 1", "color": "#2FBD6C", "premium": 9000 },
+                { "id": 2, "label": "Рівень 2", "color": "#8BC53F", "premium": 7000 },
+                { "id": 3, "label": "Рівень 3", "color": "#F0C419", "premium": 5000 },
+                { "id": 4, "label": "Рівень 4", "color": "#F472B6", "premium": 3000 },
+                { "id": 5, "label": "Рівень 5", "color": "#EF4444", "premium": 1000 }
+              ]
+            }
+          ],
+          "qualLevels": [
+            { "id": 1, "label": "Кваліфікація I", "bonus": 0 },
+            { "id": 2, "label": "Кваліфікація II", "bonus": 1500, "minZone": 3 },
+            { "id": 3, "label": "Кваліфікація III", "bonus": 3000, "minZone": 2, "degradeAtZone": 3, "degradeTo": 2 }
+          ],
+          "extras": [
+            { "id": "reimbursement", "label": "Компенсації", "kind": "money", "taxable": false, "sign": 1 },
+            { "id": "deduction", "label": "Утримання", "kind": "money", "taxable": false, "sign": -1 }
+          ]
+        }
+      }
+    }
+  ],
+
+  "normHours": {
+    "2026": {
+      "2/2": [176, 160, 176, 168, 168, 176, 184, 168, 176, 176, 168, 184],
+      "5/2": [168, 160, 176, 176, 168, 168, 184, 168, 176, 176, 160, 184]
+    }
+  }
+}
