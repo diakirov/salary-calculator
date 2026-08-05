@@ -119,7 +119,7 @@ export default function Admin({ onBack }) {
           await reload()
           ok('Зміни збережено')
         }
-        if (probe.requiresConfirm) setPending({ ...probe, run })
+        if (probe.requiresConfirm) setPending({ ...probe, run, pathRoot: draft })
         else await run()
       } else {
         const body = { effectiveFrom, label: versionLabel, version: draft }
@@ -129,7 +129,7 @@ export default function Admin({ onBack }) {
           await reload()
           ok(`Збережено — діє з ${fmtDate(effectiveFrom)}`)
         }
-        if (probe.requiresConfirm) setPending({ ...probe, run })
+        if (probe.requiresConfirm) setPending({ ...probe, run, pathRoot: draft })
         else await run()
       }
     } catch (e) {
@@ -265,7 +265,14 @@ export default function Admin({ onBack }) {
           </div>
         )}
 
-        {tab === 'history' && <History onError={err} onRolledBack={() => { reload(); ok('Відкат виконано') }} setPending={setPending} />}
+        {tab === 'history' && (
+          <History
+            config={config}
+            onError={err}
+            onRolledBack={() => { reload(); ok('Відкат виконано') }}
+            setPending={setPending}
+          />
+        )}
 
         {tab === 'logs' && <LogsPanel onError={err} />}
       </div>
@@ -337,7 +344,7 @@ function ConfirmBox({ pending, onCancel, onConfirm }) {
       <div className="sc-difflist">
         {shown.map((c, i) => (
           <div className="sc-row" key={i}>
-            <span className="k">{c.path}</span>
+            <span className="k">{humanPath(c.path, pending.pathRoot)}</span>
             <span className="v">
               <span className="dim">{JSON.stringify(c.from)}</span> → <b>{JSON.stringify(c.to)}</b>
             </span>
@@ -444,7 +451,10 @@ function NormHours({ config, onSaved, onError }) {
 }
 
 /** Історія змін (audit.jsonl) + бекапи з відкатом. */
-function History({ onError, onRolledBack, setPending }) {
+function History({ config, onError, onRolledBack, setPending }) {
+  // Шляхи діфів версійних дій — відносно версії; відкат — відносно конфігу
+  const latestVersion = [...config.rateVersions].sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? -1 : 1)).at(-1)
+  const rootFor = (action) => (action === 'config.rollback' ? config : latestVersion)
   const [audit, setAudit] = useState(null)
   const [backups, setBackups] = useState(null)
   const [unavailable, setUnavailable] = useState(null)
@@ -462,6 +472,7 @@ function History({ onError, onRolledBack, setPending }) {
       const probe = await api.adminRollback({ name, dryRun: true })
       setPending({
         ...probe,
+        pathRoot: config,
         warning: `Відкат до бекапа ${name}. Поточний стан теж збережеться бекапом.`,
         run: async () => {
           await api.adminRollback({ name, confirm: true })
@@ -500,7 +511,7 @@ function History({ onError, onRolledBack, setPending }) {
                 <div className="sc-difflist">
                   {(e.changes ?? []).slice(0, 25).map((c, j) => (
                     <div className="sc-row" key={j}>
-                      <span className="k">{c.path}</span>
+                      <span className="k">{humanPath(c.path, rootFor(e.action))}</span>
                       <span className="v"><span className="dim">{JSON.stringify(c.from)}</span> → <b>{JSON.stringify(c.to)}</b></span>
                     </div>
                   ))}
@@ -639,6 +650,31 @@ function LogsPanel({ onError }) {
   )
 }
 
+/**
+ * «profiles.role-a.baseSalary» → «Профіль A · Оклад»: шлях діфа мовою
+ * людини, а не рядком із бази. Обʼєкти, що мають name/label, називають себе
+ * самі; службові рівні (profiles, zones…) та індекси масивів не показуються.
+ */
+const SERVICE_KEYS = new Set(['profiles', 'stages', 'zones', 'qualLevels', 'extras', 'rateVersions'])
+function humanPath(path, root) {
+  const out = []
+  let node = root
+  for (const part of String(path).split('.')) {
+    const child = node && typeof node === 'object' ? node[part] : undefined
+    let label
+    if (child && typeof child === 'object' && (child.name || child.label)) {
+      label = child.name ?? child.label
+    } else if (SERVICE_KEYS.has(part) || (Array.isArray(node) && /^\d+$/.test(part))) {
+      label = null
+    } else {
+      label = LABELS[part] ?? part
+    }
+    if (label) out.push(label)
+    node = child
+  }
+  return out.join(' · ')
+}
+
 const LABELS = {
   taxRate: 'Податкова ставка (частка)',
   nightMultiplier: 'Нічна надбавка (частка)',
@@ -655,6 +691,7 @@ const LABELS = {
   zones: 'Зони',
   qualLevels: 'Кваліфікації',
   extras: 'Додаткові рядки',
+  labels: 'Підписи рядків',
 }
 
 /**
