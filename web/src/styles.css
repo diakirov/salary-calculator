@@ -223,6 +223,12 @@ input, select { font-family: inherit; }
 @media (max-width: 640px) {
   .sc-page { padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
 
+  /* Шапка не має права бути ширшою за екран: якщо не влазить — переносимо
+     праву групу на новий рядок, а не вмикаємо бічний скрол усієї сторінки */
+  .sc-header { flex-wrap: wrap; row-gap: 4px; }
+  .sc-header-right { flex-wrap: wrap; justify-content: flex-end; }
+  html, body { overflow-x: clip; }
+
   /* iOS auto-zoom: усі текстові контроли ≥16px */
   .sc-field input[type='text'], .sc-field input[type='password'], .sc-field select,
   .sc-admin-leaf input, .sc-norm-grid input, .sc-warnbar select {

@@ -518,38 +518,38 @@ function fallbackCopy(text, done) {
 }
 
 /**
- * «Як пораховано» — кожен рядок із реально підставленими числами.
- * Складові (оклад, премія зони тощо) виводяться назад із сум відповіді
- * діленням на частку — сервер додаткових даних не шле, а залогінений
- * користувач і так відновив би їх на калькуляторі.
+ * «Як пораховано» — та сама форма запису, що в презентації для новачків:
+ * `сума / норма × відпрацьовані = результат`, без часток і відсотків
+ * (єдиний відсоток — податок). Числа реальні, з цього-от розрахунку;
+ * складові виводяться назад із сум відповіді — сервер зайвого не шле.
  */
 function HowCalculated({ result, form, showGross }) {
   if (!result) return null
-  const share = result.effectiveHours / result.normHours
-  const pct = Math.round(share * 1000) / 10
+  const norm = result.normHours
+  const hours = result.effectiveHours
+  const share = hours / norm
   const by = Object.fromEntries(result.rows.map((r) => [r.id, r.amount]))
   const f = fmtMoney
   const nightH = parseNum(form.nightHours) ?? 0
   const x2H = parseNum(form.x2Hours) ?? 0
   const tenureY = Math.floor(parseNum(form.tenureYears) ?? 0)
 
+  // `база / норма × години = сума` — рівно як у презентації
+  const prop = (amount) => `${f((amount * norm) / hours)} / ${norm} × ${hours} = ${f(amount)}`
+
   const lines = []
   if (share > 0) {
-    if (by.salary != null) lines.push(['Ставка', `оклад ${f(by.salary / share)} × ${pct}% = ${f(by.salary)}`])
-    if (by.zone != null) lines.push(['Надбавка зони', `${f(by.zone / share)} × ${pct}% = ${f(by.zone)}`])
-    if (by.qual != null) lines.push(['Кваліфікація', `${f(by.qual / share)} × ${pct}% = ${f(by.qual)}`])
-    if (by.tenure != null)
-      lines.push(['Вислуга', `${f(by.tenure / share)} за ${tenureY} р. стажу × ${pct}% = ${f(by.tenure)}`])
+    if (by.salary != null) lines.push(['Ставка', prop(by.salary)])
+    if (by.zone != null) lines.push(['Надбавка за рівень', prop(by.zone)])
+    if (by.qual != null) lines.push(['Кваліфікація', prop(by.qual)])
+    if (by.tenure != null) lines.push(['Вислуга', `${prop(by.tenure)} (за ${tenureY} р. стажу)`])
   }
   if (by.night != null && nightH > 0) {
     const mult = Math.round((by.night / (result.hourlyRate * nightH)) * 100) / 100
-    lines.push(['Нічні', `${f(result.hourlyRate)}/год × ${nightH} год × ${mult} = ${f(by.night)}`])
+    lines.push(['Нічні', `${f(result.hourlyRate)} за год × ${nightH} год × ${mult} = ${f(by.night)}`])
   }
   if (by.x2 != null && x2H > 0) {
-    lines.push([
-      'Подвоєні',
-      `${f(by.x2 / x2H)}/год × ${x2H} год = ${f(by.x2)} — перша половина цих годин уже у відпрацьованих`,
-    ])
+    lines.push(['Подвоєні', `${f(by.x2 / x2H)} за год × ${x2H} год = ${f(by.x2)}`])
   }
 
   return (
@@ -557,8 +557,8 @@ function HowCalculated({ result, form, showGross }) {
       <summary>Як пораховано</summary>
       <div className="sc-how-body">
         <p>
-          Частка місяця: {result.effectiveHours} год із норми {result.normHours} ={' '}
-          {pct}%{form.knowledge ? ' (включно з +1 год за знання)' : ''}. Пропорційні рядки множаться на неї.
+          Норма — {norm} год, відпрацьовано — {hours} год
+          {form.knowledge ? ` (${result.effectiveHours - 1} + 1 за знання)` : ''}.
         </p>
         {lines.map(([label, text]) => (
           <p key={label}>
@@ -566,15 +566,16 @@ function HowCalculated({ result, form, showGross }) {
           </p>
         ))}
         <p>
-          <b>Податок:</b> {f(result.gross)} × {Math.round(result.taxRate * 100)}% = −{f(result.tax)}, одним рядком
-          від усієї суми «до податків».
+          <b>Податок:</b> {f(result.gross)} × {Math.round(result.taxRate * 100)}% = −{f(result.tax)}
         </p>
         {result.netExtras.map((r) => (
           <p key={r.id}>
-            <b>{r.label}:</b> {r.amount > 0 ? '+' : '−'}{f(Math.abs(r.amount))} уже чистими, після податку.
+            <b>{r.label}:</b> {r.amount > 0 ? '+' : '−'}{f(Math.abs(r.amount))} — чистими, податок їх не чіпає.
           </p>
         ))}
-        {!showGross && <p>У режимі «На руки» кожен рядок деталізації показано вже без податку (× {Math.round((1 - result.taxRate) * 100)}%).</p>}
+        {!showGross && (
+          <p>У режимі «На руки» кожен рядок показано вже після податку.</p>
+        )}
       </div>
     </details>
   )
