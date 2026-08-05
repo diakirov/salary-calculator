@@ -206,15 +206,19 @@ export default function Admin({ onBack }) {
                     </button>
                   ))}
                 </div>
-                <NumberTree
-                  node={draft.profiles[profileId]}
-                  onChange={(next) => setDraft({ ...draft, profiles: { ...draft.profiles, [profileId]: next } })}
-                />
+                <div className="sc-admin-tree-wrap">
+                  <NumberTree
+                    node={draft.profiles[profileId]}
+                    base={baseline.profiles?.[profileId]}
+                    onChange={(next) => setDraft({ ...draft, profiles: { ...draft.profiles, [profileId]: next } })}
+                  />
+                </div>
               </>
             ) : (
-              <div style={{ marginTop: 8 }}>
+              <div className="sc-admin-tree-wrap" style={{ marginTop: 8 }}>
                 <NumberTree
                   node={Object.fromEntries(generalKeys.map((k) => [k, draft[k]]))}
+                  base={Object.fromEntries(generalKeys.map((k) => [k, baseline[k]]))}
                   onChange={(next) => setDraft({ ...draft, ...next })}
                 />
               </div>
@@ -653,16 +657,24 @@ const LABELS = {
   extras: 'Додаткові рядки',
 }
 
-/** Рекурсивний редактор чисел. Рядки/булеві — лише читання, структура незмінна. */
-function NumberTree({ node, onChange }) {
+/**
+ * Рекурсивний редактор чисел. Рядки/булеві — лише читання, структура незмінна.
+ * `base` — той самий вузол зі стану «як завантажили»: біля кожного зміненого
+ * поля зʼявляється мітка, щоб після перерви було видно, що вже внесено.
+ * Масив з одного елемента не створює зайвого рівня вкладеності.
+ */
+function NumberTree({ node, base, onChange }) {
   if (Array.isArray(node)) {
+    if (node.length === 1) {
+      return <NumberTree node={node[0]} base={base?.[0]} onChange={(next) => onChange([next])} />
+    }
     return node.map((item, i) => {
       const title = item?.label ?? item?.name ?? item?.id ?? i
       return (
         <div key={i}>
           <div className="sc-admin-section-title">{String(title)}</div>
           <div className="sc-admin-branch">
-            <NumberTree node={item} onChange={(next) => onChange(node.map((x, j) => (j === i ? next : x)))} />
+            <NumberTree node={item} base={base?.[i]} onChange={(next) => onChange(node.map((x, j) => (j === i ? next : x)))} />
           </div>
         </div>
       )
@@ -673,9 +685,10 @@ function NumberTree({ node, onChange }) {
     return Object.entries(node).map(([key, value]) => {
       if (key.startsWith('$') || key === 'color' || key === 'id' || key === 'minZone' || key === 'degradeAtZone' || key === 'degradeTo' || key === 'sign') return null
       if (typeof value === 'number') {
+        const dirty = base != null && base[key] !== value
         return (
-          <div className="sc-admin-leaf" key={key}>
-            <label>{LABELS[key] ?? key}</label>
+          <div className={`sc-admin-leaf${dirty ? ' dirty' : ''}`} key={key}>
+            <label>{dirty ? '● ' : ''}{LABELS[key] ?? key}</label>
             <input
               type="text"
               inputMode="decimal"
@@ -694,7 +707,7 @@ function NumberTree({ node, onChange }) {
           <div key={key}>
             <div className="sc-admin-section-title">{LABELS[key] ?? value?.name ?? key}</div>
             <div className="sc-admin-branch">
-              <NumberTree node={value} onChange={(next) => onChange({ ...node, [key]: next })} />
+              <NumberTree node={value} base={base?.[key]} onChange={(next) => onChange({ ...node, [key]: next })} />
             </div>
           </div>
         )

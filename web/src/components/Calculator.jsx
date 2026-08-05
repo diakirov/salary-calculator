@@ -432,16 +432,26 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
               {history.length === 0 ? (
                 <div className="sc-history-empty">Поки що порожньо — збережи перший розрахунок</div>
               ) : (
-                <div className="sc-history-list">
-                  {history.map((h) => (
-                    <div key={h.id} className="sc-history-item" onClick={() => restore(h)}>
-                      <span className="t">
-                        {h.ts}{h.profileName ? ` · ${h.profileName}` : ''}
-                      </span>
-                      <span className="v">{fmtMoney(h.totalNet)}</span>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div className="sc-hint" style={{ margin: '0 0 4px' }}>
+                    Натисни на запис — він відновиться у форму (поточні значення заміняться)
+                  </div>
+                  <div className="sc-history-list">
+                    {history.map((h) => (
+                      <div
+                        key={h.id}
+                        className="sc-history-item"
+                        title="Відновити цей розрахунок у форму"
+                        onClick={() => restore(h)}
+                      >
+                        <span className="t">
+                          {h.ts}{h.profileName ? ` · ${h.profileName}` : ''}
+                        </span>
+                        <span className="v">{fmtMoney(h.totalNet)} <span className="sc-restore">↺</span></span>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -528,28 +538,27 @@ function HowCalculated({ result, form, showGross }) {
   const norm = result.normHours
   const hours = result.effectiveHours
   const share = hours / norm
-  const by = Object.fromEntries(result.rows.map((r) => [r.id, r.amount]))
   const f = fmtMoney
   const nightH = parseNum(form.nightHours) ?? 0
   const x2H = parseNum(form.x2Hours) ?? 0
   const tenureY = Math.floor(parseNum(form.tenureYears) ?? 0)
 
-  // `база / норма × години = сума` — рівно як у презентації
+  // `база / норма × години = сума` — рівно як у презентації.
+  // Назви рядків — ті самі, що в деталізації (приходять із конфігу).
   const prop = (amount) => `${f((amount * norm) / hours)} / ${norm} × ${hours} = ${f(amount)}`
 
   const lines = []
-  if (share > 0) {
-    if (by.salary != null) lines.push(['Ставка', prop(by.salary)])
-    if (by.zone != null) lines.push(['Надбавка за рівень', prop(by.zone)])
-    if (by.qual != null) lines.push(['Кваліфікація', prop(by.qual)])
-    if (by.tenure != null) lines.push(['Вислуга', `${prop(by.tenure)} (за ${tenureY} р. стажу)`])
-  }
-  if (by.night != null && nightH > 0) {
-    const mult = Math.round((by.night / (result.hourlyRate * nightH)) * 100) / 100
-    lines.push(['Нічні', `${f(result.hourlyRate)} за год × ${nightH} год × ${mult} = ${f(by.night)}`])
-  }
-  if (by.x2 != null && x2H > 0) {
-    lines.push(['Подвоєні', `${f(by.x2 / x2H)} за год × ${x2H} год = ${f(by.x2)}`])
+  for (const r of result.rows) {
+    if (share > 0 && (r.id === 'salary' || r.id === 'zone' || r.id === 'qual')) {
+      lines.push([r.label, prop(r.amount)])
+    } else if (share > 0 && r.id === 'tenure') {
+      lines.push([r.label, `${prop(r.amount)} (за ${tenureY} р. стажу)`])
+    } else if (r.id === 'night' && nightH > 0) {
+      const mult = Math.round((r.amount / (result.hourlyRate * nightH)) * 100) / 100
+      lines.push([r.label, `${f(result.hourlyRate)} за год × ${nightH} год × ${mult} = ${f(r.amount)}`])
+    } else if (r.id === 'x2' && x2H > 0) {
+      lines.push([r.label, `${f(r.amount / x2H)} за год × ${x2H} год = ${f(r.amount)}`])
+    }
   }
 
   return (

@@ -87,14 +87,19 @@ export default async function adminRoutes(app) {
 
       const id = effectiveFrom.slice(0, 7)
       const next = { ...version, id, label, effectiveFrom }
-      // База для аудит-діфу: замінена версія, а для нової — попередня за датою.
+      // База для діфу: замінена версія, а для нової — попередня за датою.
+      // id/label/effectiveFrom — ідентичність НОВОЇ версії, а не «зміни» старої:
+      // у діфі вони лише збивають з пантелику («2026-03 → 2026-05» читається
+      // як правка старої версії, якої не відбувається).
+      const strip = ({ id: _i, label: _l, effectiveFrom: _e, ...rest }) => rest
       const baseline = existing ?? sortVersions(config.rateVersions).filter((v) => v.effectiveFrom < effectiveFrom).at(-1) ?? {}
-      const changes = diffObjects(baseline, next)
+      const changes = diffObjects(strip(baseline), strip(next))
 
       const retro = !existing && effectiveFrom <= todayKey()
       const span = affectedSpan(config.rateVersions, effectiveFrom)
       const warning = retro
-        ? `Дата в минулому: зміняться розрахунки місяців з ${span.from} по ${span.to ?? 'сьогодні'}`
+        ? `Створюється НОВА версія: діятиме з ${span.from} по ${span.to ?? 'сьогодні'}, і ці місяці перерахуються за нею. ` +
+          `Попередні версії не змінюються${baseline.label ? `; нижче — відмінності від «${baseline.label}»` : ''}.`
         : null
 
       if (dryRun) return { changes, warning, requiresConfirm: retro }
@@ -146,7 +151,9 @@ export default async function adminRoutes(app) {
       if (!existing) return reply.code(404).send({ error: 'Немає такої версії' })
 
       const next = { ...version, id: existing.id, label: label ?? existing.label, effectiveFrom: existing.effectiveFrom }
-      const changes = diffObjects(existing, next)
+      // id і дата незмінні за визначенням — у діфі лише змістовні поля (label включно)
+      const stripImmutable = ({ id: _i, effectiveFrom: _e, ...rest }) => rest
+      const changes = diffObjects(stripImmutable(existing), stripImmutable(next))
       const active = existing.effectiveFrom <= todayKey()
       const span = affectedSpan(config.rateVersions.filter((v) => v.id !== existing.id), existing.effectiveFrom)
       const warning = active
