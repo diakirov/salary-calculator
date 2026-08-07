@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
-import { loadState, saveState, loadHistory, pushHistory, clearAll } from '../store.js'
+import { loadState, saveState, loadHistory, pushHistory, removeHistoryEntry, clearFormState, clearHistory } from '../store.js'
 import { normalizeHours, normalizeMoney, normalizeDigits, parseNum, fmtMoney, MONTH_NAMES } from '../lib/inputs.js'
 import VersionBar from './VersionBar.jsx'
 import { currentTheme, toggleTheme } from '../theme.js'
@@ -47,6 +47,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
   const [result, setResult] = useState(null)
   const [calcError, setCalcError] = useState(null)
   const [history, setHistory] = useState(loadHistory)
+  const [confirmWipe, setConfirmWipe] = useState(false) // корзина історії: перший клік — питання
   const [confirmedHours, setConfirmedHours] = useState(null) // «Ого, точно?» — підтверджене значення
   const [copied, setCopied] = useState(false)
   const debounce = useRef(null)
@@ -147,6 +148,16 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
     return () => clearTimeout(debounce.current)
   }, [profileId, JSON.stringify(form), versionId, normHours, needsConfirm])
 
+  // Питання корзини живе, поки клікаєш у ньому; клік будь-де інде — скасування
+  useEffect(() => {
+    if (!confirmWipe) return
+    const cancel = (e) => {
+      if (!e.target.closest?.('.sc-history-head, .sc-history-wipe')) setConfirmWipe(false)
+    }
+    document.addEventListener('click', cancel)
+    return () => document.removeEventListener('click', cancel)
+  }, [confirmWipe])
+
   if (!meta || !profile) return null
 
   const zones = profile.zones[form.stageId] ?? []
@@ -200,11 +211,21 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
     setForms((prev) => ({ ...prev, [entry.profileId]: { ...entry.form } }))
   }
 
+  // Скидає тільки калькулятор: історію не чіпає (у неї своя корзина)
   function resetAll() {
-    clearAll()
+    clearFormState()
     setForms({})
-    setHistory([])
     setVersionId(null)
+  }
+
+  function removeEntry(id) {
+    setHistory(removeHistoryEntry(id))
+  }
+
+  function wipeHistory() {
+    clearHistory()
+    setHistory([])
+    setConfirmWipe(false)
   }
 
   const profileIds = Object.keys(meta.profiles)
@@ -428,7 +449,25 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
               <Breakdown result={result} showGross={showGross} />
               <HowCalculated result={result} form={form} showGross={showGross} />
               <div className="sc-history-divider" />
-              <h2 style={{ margin: '0 0 6px' }}>Історія</h2>
+              <div className="sc-history-head">
+                <h2 style={{ margin: 0 }}>Історія</h2>
+                {history.length > 0 && (
+                  <button
+                    type="button"
+                    className="sc-link-btn"
+                    title="Стерти всю історію"
+                    onClick={() => setConfirmWipe(!confirmWipe)}
+                  >
+                    🗑
+                  </button>
+                )}
+              </div>
+              {confirmWipe && history.length > 0 && (
+                <div className="sc-hint warn sc-history-wipe" style={{ margin: '0 0 4px' }}>
+                  Стерти всю історію ({history.length === 1 ? '1 запис' : `${history.length} зап.`})? Відновити не вийде.{' '}
+                  <button type="button" className="sc-link-btn" onClick={wipeHistory}>Так, стерти</button>
+                </div>
+              )}
               {history.length === 0 ? (
                 <div className="sc-history-empty">Поки що порожньо — збережи перший розрахунок</div>
               ) : (
@@ -448,6 +487,14 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
                           {h.ts}{h.profileName ? ` · ${h.profileName}` : ''}
                         </span>
                         <span className="v">{fmtMoney(h.totalNet)} <span className="sc-restore">↺</span></span>
+                        <button
+                          type="button"
+                          className="sc-history-del"
+                          title="Видалити цей запис"
+                          onClick={(e) => { e.stopPropagation(); removeEntry(h.id) }}
+                        >
+                          ×
+                        </button>
                       </div>
                     ))}
                   </div>

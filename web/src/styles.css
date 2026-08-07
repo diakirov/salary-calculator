@@ -185,13 +185,16 @@ input, select { font-family: inherit; }
 
 /* ── Історія ── */
 .sc-history-divider { border-top: 1px solid var(--sc-line); margin: 9px 0 8px; }
+.sc-history-head { display: flex; align-items: center; justify-content: space-between; margin: 0 0 6px; }
 .sc-history-list { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; max-height: 180px; }
-.sc-history-item { display: flex; justify-content: space-between; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-size: 13px; flex: none; }
+.sc-history-item { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 6px; cursor: pointer; font-size: 13px; flex: none; }
 .sc-history-item:hover { background: var(--sc-panel-2); }
-.sc-history-item .t { color: var(--sc-muted); }
+.sc-history-item .t { color: var(--sc-muted); flex: 1; }
 .sc-history-item .v { font-variant-numeric: tabular-nums; font-weight: 600; }
 .sc-restore { color: var(--sc-muted); font-weight: 400; }
 .sc-history-item:hover .sc-restore { color: var(--sc-text); }
+.sc-history-del { background: none; border: none; padding: 2px 6px; margin: -2px -6px -2px 0; color: var(--sc-muted); font-size: 15px; line-height: 1; cursor: pointer; border-radius: 6px; }
+.sc-history-del:hover { color: var(--sc-text); background: var(--sc-line); }
 .sc-history-empty { color: var(--sc-muted); font-size: 13px; }
 
 /* ── Логін ── */
@@ -264,6 +267,9 @@ input, select { font-family: inherit; }
   .sc-switch i { width: 22px; height: 22px; }
   .sc-switch.on i { transform: translateX(20px); }
   .sc-history-item { padding: 11px 8px; }
+  /* × і корзина — тач-зони ≥44px, ширші за символ, щоб не влучати у «відновити» */
+  .sc-history-del { padding: 15px 18px; margin: -15px -12px -15px 0; }
+  .sc-history-head .sc-link-btn { padding: 15px 16px; }
   .sc-history-list { max-height: none; overflow-y: visible; } /* без вкладеного скролу на тачі */
 
   /* Зони: 5 чипсів в один рядок на 375px не влазять — 3+2 */

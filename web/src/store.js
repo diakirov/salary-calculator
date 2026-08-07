@@ -41,7 +41,16 @@ export function pushHistory(entry) {
   return next
 }
 
-export function clearAll() {
+export function removeHistoryEntry(id) {
+  const next = loadHistory().filter((h) => h.id !== id)
+  localStorage.setItem(KEY_HISTORY, JSON.stringify(next))
+  return next
+}
+
+export function clearFormState() {
   localStorage.removeItem(KEY_STATE)
+}
+
+export function clearHistory() {
   localStorage.removeItem(KEY_HISTORY)
 }
