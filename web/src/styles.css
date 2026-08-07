@@ -56,7 +56,7 @@ input, select { font-family: inherit; }
 .sc-chip, .sc-switch, .sc-tab, .sc-history-item { touch-action: manipulation; }
 
 /* ── Сторінка ── */
-.sc-page { background: var(--sc-bg); min-height: 100vh; min-height: 100dvh; color: var(--sc-text); padding: 14px 22px; display: flex; }
+.sc-page { background: var(--sc-bg); min-height: 100vh; min-height: 100dvh; color: var(--sc-text); padding: 22px; display: flex; }
 .sc-shell { max-width: 1280px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 10px; }
 
 /* ── Шапка ── */
