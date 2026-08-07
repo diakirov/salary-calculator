@@ -68,6 +68,10 @@ input, select { font-family: inherit; }
 .sc-role { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sc-muted); border: 1px solid var(--sc-line); border-radius: 999px; padding: 4px 11px; }
 .sc-link-btn { background: none; border: none; color: var(--sc-muted); font-size: 13px; cursor: pointer; padding: 4px 6px; }
 .sc-link-btn:hover { color: var(--sc-text); }
+.sc-icon-btn { display: inline-flex; align-items: center; justify-content: center; }
+.sc-icon-btn svg { display: block; }
+.sc-cents-btn { font-variant-numeric: tabular-nums; }
+.sc-cents-btn.on { color: var(--sc-text); }
 
 /* ── Таби профілів ── */
 .sc-tabs { display: flex; gap: 6px; flex-wrap: wrap; }

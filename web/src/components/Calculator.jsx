@@ -1,20 +1,35 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
 import { loadState, saveState, loadHistory, pushHistory, removeHistoryEntry, clearFormState, clearHistory } from '../store.js'
-import { normalizeHours, normalizeMoney, normalizeDigits, parseNum, fmtMoney, MONTH_NAMES } from '../lib/inputs.js'
+import { normalizeHours, normalizeMoney, normalizeDigits, parseNum, fmtMoney, setCentsDisplay, MONTH_NAMES } from '../lib/inputs.js'
 import VersionBar from './VersionBar.jsx'
 import { currentTheme, toggleTheme } from '../theme.js'
 
-/** Перемикач теми: ☾ у світлій пропонує темну, ☀ навпаки. */
+// Іконки — інлайн SVG, не юнікод-символи: гліфи ☾/☀ на Windows беруться
+// з системного фолбек-шрифту й пливуть за формою та базовою лінією
+const MoonIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+  </svg>
+)
+
+const SunIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />
+    <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.2 2.2M16.9 16.9l2.2 2.2M19.1 4.9l-2.2 2.2M7.1 16.9l-2.2 2.2" />
+  </svg>
+)
+
+/** Перемикач теми: місяць у світлій пропонує темну, сонце навпаки. */
 export function ThemeButton() {
   const [theme, setTheme] = useState(currentTheme)
   return (
     <button
-      className="sc-link-btn"
+      className="sc-link-btn sc-icon-btn"
       title={theme === 'light' ? 'Темна тема' : 'Світла тема'}
       onClick={() => setTheme(toggleTheme())}
     >
-      {theme === 'light' ? '☾' : '☀'}
+      {theme === 'light' ? <MoonIcon /> : <SunIcon />}
     </button>
   )
 }
@@ -47,6 +62,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
   const [result, setResult] = useState(null)
   const [calcError, setCalcError] = useState(null)
   const [history, setHistory] = useState(loadHistory)
+  const [showCents, setShowCents] = useState(() => localStorage.getItem('sc-cents') === '1')
   const [confirmWipe, setConfirmWipe] = useState(false) // корзина історії: перший клік — питання
   const [confirmedHours, setConfirmedHours] = useState(null) // «Ого, точно?» — підтверджене значення
   const [copied, setCopied] = useState(false)
@@ -163,6 +179,14 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
   const zones = profile.zones[form.stageId] ?? []
   const total = result ? (showGross ? result.gross : result.totalNet) : null
 
+  setCentsDisplay(showCents) // до рендеру дітей, щоб fmtMoney скрізь був у одному режимі
+
+  function toggleCents() {
+    const next = !showCents
+    localStorage.setItem('sc-cents', next ? '1' : '')
+    setShowCents(next)
+  }
+
   function saveToHistory() {
     if (!result) return
     const entry = {
@@ -241,6 +265,13 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
           </div>
           <div className="sc-header-right">
             <ThemeButton />
+            <button
+              className={`sc-link-btn sc-cents-btn ${showCents ? 'on' : ''}`}
+              title={showCents ? 'Ховати копійки' : 'Показувати копійки'}
+              onClick={toggleCents}
+            >
+              ,00
+            </button>
             {onAdmin && <button className="sc-link-btn" onClick={onAdmin}>Адмінка</button>}
             <button className="sc-link-btn" onClick={onLogout}>Вийти</button>
             <div className="sc-role">{auth.title ?? auth.role}</div>

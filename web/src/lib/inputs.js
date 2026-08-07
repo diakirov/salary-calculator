@@ -48,9 +48,21 @@ export function parseNum(str) {
   return Number.isFinite(n) ? n : null
 }
 
+// Показ копійок — глобальний режим відображення (кнопка «,00» у шапці).
+// На розрахунок не впливає; без копійок гроші округлюються ЗАВЖДИ ВНИЗ
+// (рішення власника: краще показати менше, ніж пообіцяти зайве).
+let centsDisplay = false
+
+export function setCentsDisplay(on) {
+  centsDisplay = !!on
+}
+
 export function fmtMoney(n) {
   if (n == null) return '—'
-  return `${Math.round(n).toLocaleString('uk-UA')} ₴`
+  if (centsDisplay) {
+    return `${n.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ₴`
+  }
+  return `${Math.floor(n).toLocaleString('uk-UA')} ₴`
 }
 
 export const MONTH_NAMES = [
