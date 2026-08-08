@@ -30,6 +30,37 @@ export function normalizeHours(raw, prev) {
   return prev
 }
 
+/**
+ * Чому набране відхилилось — коли це схоже на час.
+ *
+ * `normalizeHours` мовчить: символ просто не зʼявляється, і людина не
+ * розуміє, чому «0,5» ставиться, а «0,3» ні (скарга з практики).
+ * Найімовірніша причина такого набору — запис годин через двокрапку:
+ * «10,30» це 10 год 30 хв, тобто 10.5. Саме цей випадок і озвучуємо.
+ *
+ * Мовчимо там, де здогад був би вигадкою: цифри 6–9 у хвилинах не бувають,
+ * а промах повз крапку (`1763`) — це не час. Загального «так не можна»
+ * тут немає навмисно: правило пояснюється в іншому місці, не над полем.
+ *
+ * @returns {{ text: string, value: string } | null}
+ */
+export function hoursTimeHint(raw, prev) {
+  if (normalizeHours(raw, prev) !== prev || raw === prev) return null
+
+  const cleaned = raw.replace(/\s/g, '').replace(/[,/]/g, '.').replace(/[^0-9.]/g, '')
+  const dotIdx = cleaned.indexOf('.')
+  if (dotIdx === -1) return null
+
+  const hoursPart = cleaned.slice(0, dotIdx).replace(/\./g, '').slice(0, 3)
+  const digit = cleaned.slice(dotIdx + 1).replace(/\./g, '')[0]
+  if (!hoursPart || !/^[1-4]$/.test(digit)) return null
+
+  const minutes = Number(digit) * 10
+  // 10 хв ближче до цілої години, 20–40 — до половини
+  const value = minutes < 15 ? hoursPart : `${hoursPart}.5`
+  return { text: `${hoursPart},${digit}0 — це ${hoursPart} год ${minutes} хв? Тоді ${value}`, value }
+}
+
 /** Тільки цифри, обрізка по довжині. */
 export function normalizeDigits(raw, maxLen) {
   let cleaned = raw.replace(/\D/g, '')

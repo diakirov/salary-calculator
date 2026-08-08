@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api.js'
 import { loadState, saveState, loadHistory, pushHistory, removeHistoryEntry, clearFormState, clearHistory } from '../store.js'
-import { normalizeHours, normalizeMoney, normalizeDigits, parseNum, fmtMoney, setCentsDisplay, MONTH_NAMES } from '../lib/inputs.js'
+import { normalizeHours, hoursTimeHint, normalizeMoney, normalizeDigits, parseNum, fmtMoney, setCentsDisplay, MONTH_NAMES } from '../lib/inputs.js'
 import VersionBar from './VersionBar.jsx'
 import { currentTheme, toggleTheme } from '../theme.js'
 
@@ -65,6 +65,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
   const [showCents, setShowCents] = useState(() => localStorage.getItem('sc-cents') === '1')
   const [confirmWipe, setConfirmWipe] = useState(false) // корзина історії: перший клік — питання
   const [confirmedHours, setConfirmedHours] = useState(null) // «Ого, точно?» — підтверджене значення
+  const [timeHint, setTimeHint] = useState(null) // { field, text, value } — «10,30 це 10.5?»
   const [copied, setCopied] = useState(false)
   const debounce = useRef(null)
   const calcSeq = useRef(0) // захист від гонки: повільна стара відповідь не затирає нову
@@ -103,6 +104,35 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
     setForms((prev) => ({ ...prev, [profileId]: { ...form, ...fields } }))
     if ('month' in fields || 'year' in fields) setVersionId(null) // ручний вибір версії не липне
   }
+
+  // ── Годинні поля: ввід + підказка про «10,30» ──
+  // Підказка живе рівно доти, доки людина на ній: виправила сама, пішла в
+  // інше поле, проскролила чи просто забила — зникає. Нічого не перекриває,
+  // бо це звичайний рядок у потоці під полем.
+  function onHoursChange(field) {
+    return (e) => {
+      const raw = e.target.value
+      const hint = hoursTimeHint(raw, form[field])
+      setTimeHint(hint ? { field, ...hint } : null)
+      patch({ [field]: normalizeHours(raw, form[field]) })
+    }
+  }
+
+  function applyTimeHint() {
+    patch({ [timeHint.field]: timeHint.value })
+    setTimeHint(null)
+  }
+
+  useEffect(() => {
+    if (!timeHint) return
+    const drop = () => setTimeHint(null)
+    const timer = setTimeout(drop, 12000) // встигнути прочитати й вирішити, але не висіти
+    window.addEventListener('scroll', drop, { passive: true, capture: true })
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('scroll', drop, { capture: true })
+    }
+  }, [timeHint])
 
   // ── Норма годин для плейсхолдера ──
   const normHours = meta?.normHours?.[form.year]?.[form.schedule]?.[form.month] ?? null
@@ -159,7 +189,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
           ...(versionId ? { versionId } : {}),
         })
         .then((r) => { if (seq !== calcSeq.current) return; setResult(r); setCalcError(null) })
-        .catch((e) => { if (seq !== calcSeq.current) return; setCalcError(e.message); if (e.status === 401) onLogout() })
+        .catch((e) => { if (seq !== calcSeq.current) return; setCalcError(e.message); if (e.status === 401) onLogout({ expired: true }) })
     }, 180)
     return () => clearTimeout(debounce.current)
   }, [profileId, JSON.stringify(form), versionId, normHours, needsConfirm])
@@ -273,7 +303,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
               ,00
             </button>
             {onAdmin && <button className="sc-link-btn" onClick={onAdmin}>Адмінка</button>}
-            <button className="sc-link-btn" onClick={onLogout}>Вийти</button>
+            <button className="sc-link-btn" onClick={() => onLogout()}>Вийти</button>
             <div className="sc-role">{auth.title ?? auth.role}</div>
           </div>
         </div>
@@ -361,8 +391,10 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
                   inputMode="decimal"
                   value={form.workedHours}
                   placeholder={normHours != null ? String(normHours) : '—'}
-                  onChange={(e) => patch({ workedHours: normalizeHours(e.target.value, form.workedHours) })}
+                  onChange={onHoursChange('workedHours')}
+                  onBlur={() => setTimeHint(null)}
                 />
+                <TimeHint hint={timeHint} field="workedHours" onApply={applyTimeHint} />
                 {errors.workedHours && <div className="sc-hint warn">{errors.workedHours}</div>}
                 {needsConfirm && (
                   <div className="sc-hint warn">
@@ -413,8 +445,10 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
                     inputMode="decimal"
                     value={form.nightHours}
                     placeholder="0"
-                    onChange={(e) => patch({ nightHours: normalizeHours(e.target.value, form.nightHours) })}
+                    onChange={onHoursChange('nightHours')}
+                    onBlur={() => setTimeHint(null)}
                   />
+                  <TimeHint hint={timeHint} field="nightHours" onApply={applyTimeHint} />
                   {errors.nightHours && <div className="sc-hint warn">{errors.nightHours}</div>}
                 </div>
                 <div className="sc-field">
@@ -424,8 +458,10 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
                     inputMode="decimal"
                     value={form.x2Hours}
                     placeholder="0"
-                    onChange={(e) => patch({ x2Hours: normalizeHours(e.target.value, form.x2Hours) })}
+                    onChange={onHoursChange('x2Hours')}
+                    onBlur={() => setTimeHint(null)}
                   />
+                  <TimeHint hint={timeHint} field="x2Hours" onApply={applyTimeHint} />
                   {errors.x2Hours && <div className="sc-hint warn">{errors.x2Hours}</div>}
                 </div>
               </div>
@@ -452,7 +488,9 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
               <div className="sc-hero-top">
                 <span className="sc-hero-label">{showGross ? 'До податків' : 'На руки'}</span>
                 <div className="sc-hero-toggle">
-                  <span>До податків</span>
+                  {/* тумблер підписаний тим, що вмикає, а не станом: «До податків»
+                      біля вимкненого перемикача читалось як брехня про режим */}
+                  <span>Податки</span>
                   <div className={`sc-switch ${showGross ? 'on' : ''}`} onClick={() => setShowGross(!showGross)}>
                     <i />
                   </div>
@@ -478,7 +516,7 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
             <div className="sc-panel">
               <h2>Деталізація</h2>
               <Breakdown result={result} showGross={showGross} />
-              <HowCalculated result={result} form={form} showGross={showGross} />
+              <HowCalculated result={result} form={form} profile={profile} showGross={showGross} />
               <div className="sc-history-divider" />
               <div className="sc-history-head">
                 <h2 style={{ margin: 0 }}>Історія</h2>
@@ -534,8 +572,47 @@ export default function Calculator({ auth, onLogout, onAdmin }) {
             </div>
           </div>
         </div>
+        <Signature configUpdatedAt={auth.configUpdatedAt} />
       </div>
     </div>
+  )
+}
+
+/**
+ * Підпис унизу сторінки. Дата створення — з першого коміту першої версії
+ * (07.05.2026); публічна історія репозиторію новіша, тому спирається на
+ * приватну. `updated` — коли востаннє чіпали конфіг зі ставками; якщо сервер
+ * його не віддав, шматок просто не рендериться, «undefined» тут бути не може.
+ */
+function Signature({ configUpdatedAt }) {
+  const updated = formatConfigDate(configUpdatedAt)
+  return (
+    <div className="sc-signature">
+      by diakirov · created 07.05.2026
+      {updated ? ` · updated ${updated}` : ''} · v{__APP_VERSION__}
+    </div>
+  )
+}
+
+function formatConfigDate(iso) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`
+}
+
+/**
+ * Підказка «10,30 — це 10 год 30 хв?». Клік по ній самій підставляє значення,
+ * окремої кнопки немає. `onMouseDown` гасить фокус: інакше `blur` поля встиг
+ * би сховати підказку раніше, ніж спрацює клік по ній.
+ */
+function TimeHint({ hint, field, onApply }) {
+  if (!hint || hint.field !== field) return null
+  return (
+    <button type="button" className="sc-hint sc-hint-fix" onMouseDown={(e) => e.preventDefault()} onClick={onApply}>
+      {hint.text}
+    </button>
   )
 }
 
@@ -570,6 +647,7 @@ function ExtrasFields({ profile, form, patch }) {
               setExtra(e.id, v)
             }}
           />
+          {e.hint && <div className="sc-hint">{e.hint}</div>}
         </div>
       ))}
       {moneys.length > 0 && (
@@ -585,6 +663,7 @@ function ExtrasFields({ profile, form, patch }) {
                 onChange={(ev) => setExtra(e.id, normalizeMoney(ev.target.value))}
                 onBlur={(ev) => { if (ev.target.value === '0') setExtra(e.id, '') }}
               />
+              {e.hint && <div className="sc-hint">{e.hint}</div>}
             </div>
           ))}
         </div>
@@ -611,7 +690,7 @@ function fallbackCopy(text, done) {
  * (єдиний відсоток — податок). Числа реальні, з цього-от розрахунку;
  * складові виводяться назад із сум відповіді — сервер зайвого не шле.
  */
-function HowCalculated({ result, form, showGross }) {
+function HowCalculated({ result, form, profile, showGross }) {
   if (!result) return null
   const norm = result.normHours
   const hours = result.effectiveHours
@@ -639,6 +718,22 @@ function HowCalculated({ result, form, showGross }) {
     }
   }
 
+  // Доплати й утримання живуть усередині брутто, і на око це не очевидно:
+  // введене утримання коштує менше за номінал, а обіцяне чистими стоїть
+  // у нарахуваннях більшим числом. Обидва випадки треба сказати словами.
+  const net = (amount) => f(amount * (1 - result.taxRate))
+  const extraLines = []
+  for (const e of profile?.extras ?? []) {
+    const r = result.rows.find((x) => x.id === e.id)
+    if (!r) continue
+    extraLines.push([
+      r.label,
+      e.grossUpNet
+        ? `${f(r.amount)} у нарахуваннях — це обіцяна сума, збільшена на податок, щоб на руки лягло рівно стільки, скільки обіцяли`
+        : `${f(r.amount)} — до податку, тобто на руки це ${net(r.amount)}`,
+    ])
+  }
+
   return (
     <details className="sc-how">
       <summary>Як пораховано</summary>
@@ -648,6 +743,11 @@ function HowCalculated({ result, form, showGross }) {
           {form.knowledge ? ` (${result.effectiveHours - 1} + 1 за знання)` : ''}.
         </p>
         {lines.map(([label, text]) => (
+          <p key={label}>
+            <b>{label}:</b> {text}
+          </p>
+        ))}
+        {extraLines.map(([label, text]) => (
           <p key={label}>
             <b>{label}:</b> {text}
           </p>
