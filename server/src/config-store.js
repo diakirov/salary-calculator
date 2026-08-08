@@ -21,6 +21,19 @@ export function loadConfig({ force = false } = {}) {
   return cached
 }
 
+/**
+ * Коли конфіг востаннє змінювали — для підпису внизу сторінки.
+ * Не критично: якщо файл недоступний, повертаємо null і підпис просто
+ * коротший. Дата — не секрет, на відміну від самих чисел.
+ */
+export function configUpdatedAt() {
+  try {
+    return fs.statSync(CONFIG_PATH).mtime.toISOString()
+  } catch {
+    return null
+  }
+}
+
 export function saveConfig(next) {
   assertValidConfig(next)
   const dir = path.dirname(CONFIG_PATH)
@@ -88,6 +101,13 @@ export function assertValidConfig(config) {
         }
         if (extra.sign != null && extra.sign !== 1 && extra.sign !== -1) {
           fail(`${pid}/${extra.id}: sign має бути 1 або -1`)
+        }
+        // grossUpNet без taxable нічого не означає: грос-апити можна лише те,
+        // що потрапляє в брутто. Мовчазне ігнорування тут коштувало б 23%.
+        if (extra.hint != null && typeof extra.hint !== 'string') fail(`${pid}/${extra.id}: hint має бути рядком`)
+        if (extra.grossUpNet != null) {
+          if (typeof extra.grossUpNet !== 'boolean') fail(`${pid}/${extra.id}: grossUpNet має бути boolean`)
+          if (extra.grossUpNet && !extra.taxable) fail(`${pid}/${extra.id}: grossUpNet потребує taxable: true`)
         }
       }
     }

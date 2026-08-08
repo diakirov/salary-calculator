@@ -23,7 +23,17 @@ export function profilesView(config, session) {
         p.stages.map((s) => [s.id, s.zones.map((z) => ({ id: z.id, label: z.label, color: z.color }))])
       ),
       qualLevels: p.qualLevels.map((q) => ({ id: q.id, label: q.label })),
-      extras: (p.extras ?? []).map((e) => ({ id: e.id, label: e.label, kind: e.kind, max: e.max ?? null, sign: e.sign ?? 1 })),
+      // `hint` і `grossUpNet` — структура, не числа: підпис під полем і те,
+      // як пояснювати рядок у «Як пораховано» (обіцянка чистими чи номінал).
+      extras: (p.extras ?? []).map((e) => ({
+        id: e.id,
+        label: e.label,
+        hint: e.hint ?? null,
+        kind: e.kind,
+        max: e.max ?? null,
+        sign: e.sign ?? 1,
+        grossUpNet: !!e.grossUpNet,
+      })),
       hasTenure: !!p.tenureBaseIncome,
     }
   }

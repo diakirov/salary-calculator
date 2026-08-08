@@ -87,6 +87,17 @@ test('taxable extra потрапляє в брутто', () => {
   assert.equal(r.gross, 54000)
 })
 
+test('grossUpNet: введена сума — обіцянка чистими, у брутто йде грос-ап', () => {
+  const r = calculate({ rates, normHours: 176, input: { ...base, extras: { 'net-promise': 1000 } } })
+  const row = r.rows.find((x) => x.id === 'net-promise')
+  const grossed = round2(1000 / (1 - rates.taxRate))
+  assert.equal(row.amount, grossed)
+  // сенс усієї конструкції: після податку від обіцяного лишається саме воно
+  assert.ok(Math.abs(round2(grossed * (1 - rates.taxRate)) - 1000) <= 0.01)
+  // і воно не потрапляє вдруге в чисті доплати
+  assert.equal(r.netExtras.find((x) => x.id === 'net-promise'), undefined)
+})
+
 test('другий етап профілю: інші надбавки за рівень', () => {
   const lt3 = calculate({ rates, normHours: 176, input: { ...base, profileId: 'role-b', stageId: 'stage-1' } })
   const gte3 = calculate({ rates, normHours: 176, input: { ...base, profileId: 'role-b', stageId: 'stage-2' } })
@@ -142,5 +153,9 @@ test('валідація extras: невідомий kind, count без amount, �
   assert.throws(() => assertValidConfig(broken({ kind: 'count' })), /amount/)
   assert.throws(() => assertValidConfig(broken({ sign: 100 })), /sign/)
   assert.throws(() => assertValidConfig(broken({ max: 2.5 })), /max/)
+  assert.throws(() => assertValidConfig(broken({ grossUpNet: 'так' })), /grossUpNet/)
+  // грос-апити можна лише те, що потрапляє в брутто — інакше прапорець
+  // тихо нічого не робить, а ціна такої тиші 23%
+  assert.throws(() => assertValidConfig(broken({ taxable: false, grossUpNet: true })), /потребує taxable/)
   assertValidConfig(broken({ kind: 'count', amount: 300, max: 5 })) // здоровий — проходить
 })

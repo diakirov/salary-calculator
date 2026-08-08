@@ -36,11 +36,37 @@ test('розрахункові листи сходяться до копійки
       assert.ok(Math.abs(actual - expected) <= 0.011, `${c.name}: ${rowId} = ${actual}, очікували ${expected}`)
     }
 
-    // Внутрішня замкненість: брутто = сума оподатковуваних рядків. Саме цей
-    // клас розбіжностей (рядок, що оминає брутто) колись пройшов непоміченим.
+    // Підсумок листа — головна звірка, а не рядки: саме тут виявилось, що
+    // доплати живуть усередині брутто. Рядки можуть збігатись усі до одного,
+    // а виплата — ні (08.08.2026).
+    if (c.expected.gross != null) {
+      assert.ok(
+        Math.abs(result.gross - c.expected.gross) <= 0.011,
+        `${c.name}: нараховано ${result.gross}, у листі ${c.expected.gross}`
+      )
+    }
+    if (c.expected.net != null) {
+      assert.ok(
+        Math.abs(result.totalNet - c.expected.net) <= 0.011,
+        `${c.name}: на руки ${result.totalNet}, у листі ${c.expected.net}`
+      )
+    }
+
+    // Внутрішня замкненість: жоден рядок не оминає брутто. Допуск —
+    // піврядка на кожен рядок, бо брутто зводиться з ТОЧНИХ сум, а рядки
+    // віддаються округленими (див. коментар у calculate.js).
     const rowSum = result.rows.reduce((s, r) => s + r.amount, 0)
-    assert.ok(Math.abs(result.gross - rowSum) <= 0.005, `${c.name}: gross ${result.gross} ≠ Σрядків ${rowSum}`)
+    const slack = 0.005 * result.rows.length
+    assert.ok(Math.abs(result.gross - rowSum) <= slack, `${c.name}: gross ${result.gross} ≠ Σрядків ${rowSum}`)
   }
+})
+
+test('кожен лист із підсумком звіряється саме за підсумком', { skip: !hasPrivate && 'приватні фікстури відсутні' }, () => {
+  // Сторож проти тихої деградації: якщо колись усі `expected.gross` зникнуть,
+  // попередній тест лишиться зеленим, перевіряючи самі лише рядки.
+  const { cases } = JSON.parse(fs.readFileSync(fixturePath, 'utf-8'))
+  const withTotals = cases.filter((c) => c.expected.gross != null && c.expected.net != null)
+  assert.ok(withTotals.length > 0, 'жоден кейс не має підсумків листа — звірка знову тримається на рядках')
 })
 
 test('цільові доходи: години = нормі → середній рівень дає ціль', { skip: !hasPrivate && 'приватні фікстури відсутні' }, () => {

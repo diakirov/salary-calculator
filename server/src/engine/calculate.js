@@ -5,9 +5,19 @@
  * приходить із конфігу, а тут немає жодної константи предметної області.
  *
  * Порядок операцій навмисно повторює розрахунковий лист бухгалтерії:
- * кожен рядок нарахування округлюється до копійок ОКРЕМО, і лише потім
- * рядки сумуються. Якщо сумувати точні значення й округлити наприкінці —
- * підсумок розходиться на копійку. Це не косметика, це звірка з листом.
+ * рядки рахуються з повною точністю, брутто — це округлена сума ТОЧНИХ
+ * значень, і лише для показу кожен рядок округлюється окремо. Саме так
+ * рахує лист: у ньому видно округлені рядки, але «Всього нараховано»
+ * зведене з точних (звірено на липні 2026 — сума округлених дає на
+ * копійку більше, ніж стоїть у листі).
+ *
+ * Доплати й утримання діляться на три види, і різниця не косметична:
+ *   • не оподатковувані (`taxable: false`) — додаються після податку;
+ *   • номінальні в брутто (`taxable: true`) — утримання: людина вписує
+ *     число з табеля, воно знімається до податку;
+ *   • обіцяні чистими (`taxable: true, grossUpNet: true`) — бухгалтерія
+ *     грос-апить їх так, щоб на руки лягла рівно обіцяна сума, тому в
+ *     брутто йде amount / (1 − податок).
  */
 
 export function round2(value) {
@@ -80,16 +90,24 @@ export function calculate({ rates, normHours, input }) {
     const amount = extraAmount(extra, input.extras?.[extra.id])
     if (amount === 0) continue
     const signed = amount * (extra.sign ?? 1)
-    const entry = row(extra.id, extra.label, signed)
-    if (extra.taxable) rows.push(entry)
-    else netExtras.push(entry)
+    if (!extra.taxable) {
+      netExtras.push(row(extra.id, extra.label, signed))
+      continue
+    }
+    // Грос-ап рахується до копійок одразу: саме округлену суму бухгалтерія
+    // і ставить у лист рядком, з неї ж далі рахується податок.
+    rows.push(row(extra.id, extra.label, extra.grossUpNet ? round2(signed / (1 - rates.taxRate)) : signed))
   }
 
   // ── Підсумки ──────────────────────────────────────────────────────────
+  // Сумуються ТОЧНІ значення рядків, округлення — один раз на підсумку.
   const gross = round2(rows.reduce((sum, r) => sum + r.amount, 0))
   const tax = round2(gross * rates.taxRate)
   const net = round2(gross - tax)
   const extrasNet = round2(netExtras.reduce((sum, r) => sum + r.amount, 0))
+
+  // Рядки округлюються лише тут, для показу: до цього моменту вони точні.
+  for (const r of [...rows, ...netExtras]) r.amount = round2(r.amount)
 
   return {
     normHours,
@@ -118,8 +136,9 @@ export class CalcError extends Error {
   }
 }
 
+/** Сума лишається точною — округлює її вже `calculate`, після підсумків. */
 function row(id, label, amount) {
-  return { id, label, amount: round2(amount) }
+  return { id, label, amount }
 }
 
 function num(value) {

@@ -54,7 +54,8 @@
           "extras": [
             { "id": "bonus", "label": "Разовий бонус", "kind": "count", "amount": 300, "max": 5, "taxable": false, "sign": 1 },
             { "id": "reimbursement", "label": "Компенсації", "kind": "money", "taxable": false, "sign": 1 },
-            { "id": "deduction", "label": "Утримання", "kind": "money", "taxable": false, "sign": -1 }
+            { "id": "deduction", "label": "Утримання", "kind": "money", "taxable": false, "sign": -1 },
+            { "id": "net-promise", "label": "Доплата, обіцяна чистими", "kind": "money", "taxable": true, "grossUpNet": true, "sign": 1 }
           ]
         },
 
