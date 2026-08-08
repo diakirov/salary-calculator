@@ -46,6 +46,10 @@ await app.register(compress) // Caddy у цій інсталяції не сти
 // файлової системи та деталі оточення. Все справжнє — у лог.
 app.setErrorHandler((err, req, reply) => {
   const status = err.statusCode && err.statusCode < 500 ? err.statusCode : 500
+  // Помилки схеми сформульовані для розробника («body/workedHours must be…»)
+  // і мовою запиту: користувачу вони нічого не пояснюють. Свої повідомлення
+  // рушія й ролей — навпаки, писались для нього, тому йдуть як є.
+  if (err.validation) return reply.code(status).send({ error: 'Дані запиту не пройшли перевірку' })
   if (status < 500) return reply.code(status).send({ error: err.message })
   req.log.error(err)
   return reply.code(500).send({ error: 'Внутрішня помилка' })

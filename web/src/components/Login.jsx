@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { api } from '../api.js'
 
-export default function Login({ onLogin }) {
+export default function Login({ onLogin, expired = false }) {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -23,7 +23,11 @@ export default function Login({ onLogin }) {
     <div className="sc-login">
       <form className="sc-login-card" onSubmit={submit}>
         <h1>Калькулятор ЗП</h1>
-        <p>Внутрішній інструмент. Введи пароль своєї ролі — і все порахується.</p>
+        <p>
+          {expired
+            ? 'Сесія завершилась — увійди знову. Введене нікуди не зникло.'
+            : 'Внутрішній інструмент. Введи пароль своєї ролі — і все порахується.'}
+        </p>
         <div className="sc-field">
           <label>Пароль</label>
           <input

@@ -17,7 +17,10 @@ export function roles() {
   return loadConfig().roles ?? {}
 }
 
-const SESSION_TTL_S = 60 * 60 * 24 * 30 // 30 днів
+// 16 годин, відлік від входу. Зміна триває 12 годин, тож жорсткі 12 вибивали б
+// тих, хто почав рахувати на її початку й повернувся після; ковзний таймер для
+// інструмента, яким користуються раз на місяць, вигоди не дає.
+const SESSION_TTL_S = 60 * 60 * 16
 
 function secret() {
   const s = process.env.SESSION_SECRET

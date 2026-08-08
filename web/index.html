@@ -11,9 +11,45 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <title>Калькулятор ЗП</title>
+    <!-- Стилі фолбека — саме тут, інлайном: styles.css приїжджає разом із
+         бандлом, тож браузер, який не подужав модулі, не побачив би і його -->
+    <style>
+      .sc-boot {
+        max-width: 420px;
+        margin: 15vh auto;
+        padding: 24px;
+        font: 16px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+        color: #e8e8e6;
+        background: #1a1a19;
+        border-radius: 12px;
+        text-align: center;
+      }
+      .sc-boot h1 { font-size: 19px; margin: 0 0 10px; }
+      .sc-boot p { margin: 0; color: #a3a39d; }
+      body { background: #121211; margin: 0; }
+      @media (prefers-color-scheme: light) {
+        body { background: #f2f2ef; }
+        .sc-boot { color: #1a1a19; background: #fff; }
+        .sc-boot p { color: #6b6b64; }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Вміст #root — фолбек для браузерів, які не тягнуть ES-модулі: такий
+         браузер просто ігнорує <script type="module"> і без цього блоку
+         показав би порожню білу сторінку. React затирає його при монтуванні. -->
+    <div id="root">
+      <div class="sc-boot">
+        <h1>Калькулятор ЗП</h1>
+        <p>Схоже, браузер застарий і не може відкрити цю сторінку. Онови його або зайди з іншого — на телефоні підійде будь-який свіжий Chrome чи Safari.</p>
+      </div>
+    </div>
+    <noscript>
+      <div class="sc-boot">
+        <h1>Калькулятор ЗП</h1>
+        <p>Щоб рахувати, потрібен увімкнений JavaScript.</p>
+      </div>
+    </noscript>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

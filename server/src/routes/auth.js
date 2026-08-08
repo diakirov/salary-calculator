@@ -1,4 +1,5 @@
 import { verifyPassword, issueSession, roles, COOKIE_NAME, cookieOptions } from '../lib/auth.js'
+import { configUpdatedAt } from '../config-store.js'
 
 export default async function authRoutes(app) {
   app.post(
@@ -26,7 +27,7 @@ export default async function authRoutes(app) {
       reply.setCookie(COOKIE_NAME, issueSession(role), cookieOptions)
       // Та сама форма, що /api/me: клієнту після логіна не треба другий запит.
       const meta = roles()[role] ?? {}
-      return { role, isAdmin: !!meta.admin, title: meta.title ?? null }
+      return { role, isAdmin: !!meta.admin, title: meta.title ?? null, configUpdatedAt: configUpdatedAt() }
     }
   )
 
@@ -38,6 +39,11 @@ export default async function authRoutes(app) {
   app.get('/api/me', async (req) => {
     // title — підпис ролі для шапки; береться з конфігу, щоб інтерфейс
     // не знав назв ролей конкретного розгортання.
-    return { role: req.session.role, isAdmin: req.session.admin, title: req.session.title ?? null }
+    return {
+      role: req.session.role,
+      isAdmin: req.session.admin,
+      title: req.session.title ?? null,
+      configUpdatedAt: configUpdatedAt(),
+    }
   })
 }

@@ -7,6 +7,9 @@ import Admin from './components/Admin.jsx'
 export default function App() {
   const [auth, setAuth] = useState({ loading: true, role: null, isAdmin: false })
   const [screen, setScreen] = useState('calc') // 'calc' | 'admin'
+  // Сесія протухає сама (16 год). Без цього людину викидало на логін мовчки,
+  // і виглядало це як поламаний калькулятор, а не як завершена сесія.
+  const [expired, setExpired] = useState(false)
 
   useEffect(() => {
     api
@@ -18,11 +21,12 @@ export default function App() {
   if (auth.loading) return null
 
   if (!auth.role) {
-    return <Login onLogin={(me) => setAuth({ loading: false, ...me })} />
+    return <Login expired={expired} onLogin={(me) => { setExpired(false); setAuth({ loading: false, ...me }) }} />
   }
 
-  async function logout() {
+  async function logout({ expired: wasExpired = false } = {}) {
     await api.logout().catch(() => {})
+    setExpired(wasExpired)
     setAuth({ loading: false, role: null, isAdmin: false })
     setScreen('calc')
   }
